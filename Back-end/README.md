@@ -34,7 +34,7 @@ Back-end/
 |   |-- schemas/             Validações compartilhadas
 |   |-- utils/               JWT, CPF/CNPJ e erros da API
 |   |-- app.ts               Configuração do Express
-|   `-- server.ts            Inicialização do servidor
+|   `-- local.ts             Inicialização exclusiva do servidor local
 |-- tests/                   Testes automatizados
 |-- .env.example             Exemplo de configuração
 |-- docker-compose.yml       PostgreSQL para desenvolvimento
@@ -364,6 +364,21 @@ Em produção, use uma senha forte para o PostgreSQL, um `JWT_SECRET` longo e ex
 | `npm run db:seed` | Cadastra/atualiza associados iniciais |
 | `npm test` | Executa todos os testes |
 | `npm run test:watch` | Executa testes em modo contínuo |
+
+
+## Deploy na Vercel
+
+A Vercel detecta automaticamente `src/app.ts` como uma aplicação Express e a publica como uma única Vercel Function. O projeto não usa `vercel.json` nem rewrites manuais.
+
+No projeto da Vercel:
+
+1. configure `Back-end` como **Root Directory**;
+2. mantenha a detecção automática e não defina Output Directory;
+3. cadastre `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN` e `CORS_ORIGIN`;
+4. use a connection string PostgreSQL do pooler do Supabase, não a URL pública do projeto;
+5. aplique migrações e seed fora do build da Vercel.
+
+O guia completo está em [`docs/deploy-vercel.md`](docs/deploy-vercel.md).
 
 ## Problemas comuns
 

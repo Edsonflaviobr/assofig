@@ -15,6 +15,7 @@ export const app = express();
 const allowedOrigins = env.CORS_ORIGIN.split(',').map((origin) => origin.trim());
 
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: allowedOrigins, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], allowedHeaders: ['Content-Type', 'Authorization'] }));
 app.use(express.json({ limit: '100kb' }));
@@ -29,3 +30,5 @@ app.use('/api/beneficios', beneficiosRouter);
 app.use('/api', publicRouter);
 app.use(notFound);
 app.use(errorHandler);
+
+export default app;

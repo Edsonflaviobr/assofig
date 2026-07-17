@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { attachDatabasePool } from '@vercel/functions';
 import { env } from '../config/env.js';
 
 pg.types.setTypeParser(20, Number);
@@ -9,3 +10,5 @@ export const pool = new pg.Pool({
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000
 });
+
+attachDatabasePool(pool);
