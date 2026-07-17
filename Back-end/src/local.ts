@@ -1,4 +1,4 @@
-import app from './app.js';
+import app from './app.mjs';
 import { env } from './config/env.js';
 import { pool } from './db/pool.js';
 

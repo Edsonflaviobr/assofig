@@ -1,10 +1,10 @@
 # Deploy do back-end na Vercel
 
-Este projeto segue a detecção automática atual da Vercel para Express. O arquivo `src/app.ts` exporta a aplicação Express como `default`; a Vercel o transforma em uma única Vercel Function. Não é necessário criar `vercel.json`, uma pasta `api/` ou rewrites manuais.
+Este projeto segue a detecção automática atual da Vercel para Express. O arquivo `src/app.mts` exporta a aplicação Express como `default`; a Vercel o transforma em uma única Vercel Function. Não é necessário criar `vercel.json`, uma pasta `api/` ou rewrites manuais.
 
 ## Estrutura de inicialização
 
-- `src/app.ts`: configura o Express e exporta a aplicação. É o entrypoint detectado pela Vercel.
+- `src/app.mts`: configura o Express e exporta a aplicação. É o entrypoint detectado pela Vercel.
 - `src/local.ts`: chama `app.listen()` somente para `npm run dev` e `npm start`.
 - `src/db/pool.ts`: cria o pool PostgreSQL no escopo global e o anexa ao ciclo de vida do Fluid Compute.
 
@@ -96,4 +96,4 @@ npm start
 
 ## Por que não existe `vercel.json`
 
-A Vercel reconhece oficialmente `src/app.ts` e aceita um `default export` da aplicação Express. Um `vercel.json` com `builds`, `routes` ou rewrites para `/api` reproduziria configurações antigas, poderia alterar os caminhos atuais e substituir padrões que a plataforma já fornece automaticamente.
+A Vercel reconhece oficialmente `src/app.mts` e aceita um `default export` da aplicação Express. Um `vercel.json` com `builds`, `routes` ou rewrites para `/api` reproduziria configurações antigas, poderia alterar os caminhos atuais e substituir padrões que a plataforma já fornece automaticamente.

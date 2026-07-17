@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { app } from '../src/app.js';
+import { app } from '../src/app.mjs';
 
 describe('contrato HTTP básico', () => {
   it('expõe o health check', async () => {
