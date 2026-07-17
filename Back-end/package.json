@@ -14,7 +14,7 @@
     "test:watch": "vitest"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "dependencies": {
     "@vercel/functions": "^3.7.5",

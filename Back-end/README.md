@@ -45,7 +45,7 @@ A aplicação foi dividida dessa forma para manter banco, regras de acesso, vali
 
 ## Tecnologias e decisões
 
-- **Node.js 20+ e TypeScript:** servidor e tipagem do código.
+- **Node.js 24 e TypeScript:** servidor e tipagem do código.
 - **Express:** endpoints HTTP da API REST.
 - **PostgreSQL:** armazenamento persistente.
 - **pg:** consultas parametrizadas e transações.
@@ -59,7 +59,7 @@ As consultas usam parâmetros (`$1`, `$2` etc.) para evitar injeção de SQL. Se
 
 ## Pré-requisitos
 
-- Node.js 20 ou superior;
+- Node.js 24;
 - npm;
 - PostgreSQL 16 recomendado;
 - opcionalmente Docker Desktop, para iniciar o PostgreSQL pelo arquivo `docker-compose.yml`.
