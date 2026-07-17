@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
+import * as helmetModule from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { env } from './config/env.js';
 import { authRouter } from './routes/auth.js';
@@ -16,7 +16,7 @@ const allowedOrigins = env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
-app.use(helmet());
+app.use(helmetModule.default());
 app.use(cors({ origin: allowedOrigins, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], allowedHeaders: ['Content-Type', 'Authorization'] }));
 app.use(express.json({ limit: '100kb' }));
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false }));
