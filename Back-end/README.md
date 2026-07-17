@@ -36,7 +36,7 @@ Back-end/
 |   |-- app.ts               Configuração ESM do Express e entrypoint da Vercel
 |   `-- local.ts             Inicialização exclusiva do servidor local
 |-- tests/                   Testes automatizados
-|-- .env.example             Exemplo de configuração
+|-- .env                     Configuração local (não versionada)
 |-- docker-compose.yml       PostgreSQL para desenvolvimento
 `-- package.json             Dependências e comandos
 ```
@@ -79,13 +79,9 @@ Abra o PowerShell na pasta `Back-end` e execute:
 npm install
 ```
 
-## 2. Criar o arquivo de configuração
+## 2. Configurar o arquivo `.env`
 
-```powershell
-Copy-Item .env.example .env
-```
-
-Edite o arquivo `.env`:
+O arquivo `.env` contém as configurações locais e não é enviado ao Git. Edite-o conforme o ambiente:
 
 ```env
 NODE_ENV=development
@@ -95,6 +91,10 @@ JWT_SECRET=coloque-aqui-uma-chave-secreta-com-mais-de-32-caracteres
 JWT_EXPIRES_IN=8h
 CORS_ORIGIN=http://localhost:5500,http://127.0.0.1:5500
 SEED_PASSWORD=defina-uma-senha-inicial-segura
+FRONTEND_URL=http://localhost:5500
+EMAIL_PROVIDER=disabled
+RESEND_API_KEY=configure-em-producao
+EMAIL_FROM=no-reply@seu-dominio.com
 ```
 
 Nunca envie o arquivo `.env` para um repositório. Ele já está ignorado pelo `.gitignore`.
@@ -302,6 +302,11 @@ A API aplica duas verificações:
 | GET/POST | `/api/diretoria/associados/:id/inadimplencias` | Diretoria |
 | PATCH | `/api/diretoria/associados/:id/inadimplencias/:inadimplenciaId/regularizar` | Diretoria |
 
+## Recuperação de senha
+
+`POST /api/auth/forgot-password` sempre devolve a mesma resposta, exista ou não uma conta. Tokens aleatórios têm validade de 30 minutos, são armazenados apenas como hash SHA-256 e podem ser usados uma única vez. `POST /api/auth/reset-password` grava a nova senha com bcrypt.
+
+O e-mail contém `FRONTEND_URL/reset-password?token=TOKEN`. A configuração do Resend, o modo seguro de desenvolvimento e os exemplos completos estão em `docs/password-recovery-api.md`.
 Os estados de associado usados pelo front-end são:
 
 - `active`: em dia;
@@ -329,7 +334,10 @@ Os testes verificam:
 - respostas de validação e 404;
 - CPF válido e inválido;
 - CNPJ válido e inválido;
-- os documentos fornecidos para o seed.
+- os documentos fornecidos para o seed;
+- solicitação de recuperação sem enumeração de contas;
+- token inválido, expirado e reutilizado;
+- redefinição da senha com bcrypt.
 
 Para acompanhar durante alterações:
 

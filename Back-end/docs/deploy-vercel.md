@@ -30,6 +30,10 @@ Cadastre em **Project Settings > Environment Variables**:
 | `JWT_SECRET` | Segredo exclusivo com pelo menos 32 caracteres |
 | `JWT_EXPIRES_IN` | Por exemplo, `8h` |
 | `CORS_ORIGIN` | URL exata do front-end publicado |
+| `FRONTEND_URL` | Origem do front-end usada no link de redefinição |
+| `EMAIL_PROVIDER` | `resend` |
+| `RESEND_API_KEY` | Chave secreta do Resend |
+| `EMAIL_FROM` | Remetente de domínio verificado no Resend |
 
 Não é necessário configurar `PORT` na Vercel. `SEED_PASSWORD` só é necessária ao executar o seed e não deve permanecer no ambiente da aplicação se não for usada.
 
@@ -45,7 +49,7 @@ Se a senha contiver caracteres especiais, use a connection string fornecida pelo
 
 ## Migrações e seed
 
-Migrações não são executadas no build da Vercel. Antes do primeiro deploy funcional, use a `DATABASE_URL` de produção em um `.env` local seguro e execute:
+Migrações não são executadas no build da Vercel. A migration `003_password_reset_tokens.sql` é obrigatória para o fluxo de recuperação de senha. Antes do primeiro deploy funcional, use a `DATABASE_URL` de produção em um `.env` local seguro e execute:
 
 ```powershell
 npm run db:migrate

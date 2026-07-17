@@ -7,6 +7,7 @@
 
   const routes = {
     login: '/auth/login',
+    forgotPassword: '/auth/forgot-password',
     profile: '/associados/me',
     members: '/diretoria/associados',
     payments: '/pagamentos',
@@ -85,6 +86,17 @@
         })
       ),
 
+    forgotPassword: data =>
+      withMock(
+        () =>
+          request(routes.forgotPassword, {
+            method: 'POST',
+            body: JSON.stringify(data)
+          }),
+        () => ({
+          sent: true
+        })
+      ),
     getProfile: () =>
       withMock(
         () => request(routes.profile),
