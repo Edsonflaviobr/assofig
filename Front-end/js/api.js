@@ -4,6 +4,7 @@
   const routes = {
     login: '/auth/login',
     forgotPassword: '/auth/forgot-password',
+    changePassword: '/auth/change-password',
     profile: '/auth/me',
     profileFallback: '/profile',
     members: '/members',
@@ -51,7 +52,7 @@
         data
       );
 
-      if ((response.status === 401 || response.status === 403) && token) {
+      if (response.status === 401 && token) {
         localStorage.removeItem('assofig_token');
         window.dispatchEvent(new CustomEvent('assofig:session-expired', { detail: { status: response.status } }));
       }
@@ -88,6 +89,11 @@
         body: JSON.stringify(data)
       }),
 
+    changePassword: data =>
+      request(routes.changePassword, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
     getProfile: () =>
       fallbackOnNotFound(
         () => request(routes.profile),

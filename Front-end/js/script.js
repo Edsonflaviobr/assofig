@@ -20,7 +20,7 @@
     { name: 'status', label: 'Situação', type: 'status', required: true }
   ];
 
-  let privateState = { profile: null, role: null, members: [] };
+  let privateState = { profile: null, access: null, members: [], loginResponse: null };
 
   function escapeHtml(value) {
     const div = document.createElement('div');
@@ -56,7 +56,10 @@
       registry: source.registry ?? source.crefito ?? source.matricula ?? '',
       city: source.city ?? source.cidade ?? '',
       status: source.status ?? source.situacao ?? 'active',
-      role: source.role ?? source.perfil ?? source.tipo ?? ''
+      role: source.role ?? source.perfil ?? source.tipo ?? '',
+      associadoId: source.associadoId ?? source.associationId ?? source.memberId ?? source.associado?.id ?? null,
+      permissions: source.permissions || null,
+      mustChangePassword: Boolean(source.mustChangePassword ?? source.must_change_password)
     };
   }
 
@@ -79,7 +82,54 @@
   }
 
   const roleValue = value => String(value || '').trim().toLowerCase();
-  const isDirectorRole = value => ['admin', 'director', 'diretoria', 'board', 'administrator'].includes(roleValue(value));
+  const isDirectorRole = value => ['admin', 'director', 'diretor', 'diretora', 'diretoria', 'board', 'administrator', 'administrador', 'administradora'].includes(roleValue(value));
+  function permissionValue(sources, key) {
+    for (const source of sources) {
+      if (typeof source?.[key] === 'boolean') return source[key];
+    }
+    return null;
+  }
+
+  function requiresPasswordChange(response) {
+    const raw = unwrap(response) || {};
+    return Boolean(
+      response?.mustChangePassword ?? response?.must_change_password ??
+      response?.data?.mustChangePassword ?? response?.data?.must_change_password ??
+      response?.user?.mustChangePassword ?? response?.user?.must_change_password ??
+      response?.data?.user?.mustChangePassword ?? response?.data?.user?.must_change_password ??
+      raw.mustChangePassword ?? raw.must_change_password
+    );
+  }
+
+  function buildAccessContext(profileResponse, loginResponse) {
+    const profileRaw = unwrap(profileResponse) || {};
+    const loginRaw = unwrap(loginResponse) || {};
+    const profile = normalizeMember(profileResponse);
+    const permissionSources = [
+      profileResponse?.permissions,
+      profileResponse?.data?.permissions,
+      profileRaw.permissions,
+      loginResponse?.permissions,
+      loginResponse?.data?.permissions,
+      loginRaw.permissions
+    ];
+    const memberPermission = permissionValue(permissionSources, 'canAccessMemberArea');
+    const adminPermission = permissionValue(permissionSources, 'canAccessAdminArea');
+    const associadoId = profileRaw.associadoId ?? profileRaw.associationId ?? profileRaw.memberId ??
+      profileRaw.associado?.id ?? profileResponse?.associadoId ?? profileResponse?.data?.associadoId ??
+      loginRaw.associadoId ?? loginRaw.associationId ?? loginRaw.memberId ?? loginRaw.associado?.id ?? null;
+    const role = profile.role || profileRaw.role || profileRaw.tipo || loginRaw.role || loginRaw.tipo ||
+      loginResponse?.role || loginResponse?.data?.role;
+
+    profile.associadoId = associadoId;
+    return {
+      canAccessMemberArea: memberPermission === null ? Boolean(associadoId) : memberPermission,
+      canAccessAdminArea: adminPermission === null ? isDirectorRole(role) : adminPermission,
+      associadoId,
+      role,
+      profile
+    };
+  }
   const firstName = name => String(name || 'Associado').trim().split(/\s+/)[0];
   const money = value => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -168,7 +218,7 @@
 
   function closeModals() {
     $$('.modal').forEach(modal => { modal.hidden = true; });
-    if ($('#member-portal').hidden && $('#admin-portal').hidden) document.body.classList.remove('modal-open');
+    if ($('#access-portal').hidden && $('#member-portal').hidden && $('#admin-portal').hidden) document.body.classList.remove('modal-open');
   }
 
   function dynamicModal(content, className) {
@@ -209,78 +259,156 @@
     const nav = director
       ? '<button class="active" data-portal-target="admin-overview">▦ Visão geral</button><button data-portal-target="member-management">♙ Associados</button>'
       : '<button class="active" data-portal-target="member-overview">▦ Visão geral</button><button data-portal-target="my-data">♙ Meus dados</button><button data-portal-target="monthly-payment">$ Mensalidade</button><button data-portal-target="my-defaults">! Pendências</button>';
+    const switchAction = privateState.access?.canAccessMemberArea && privateState.access?.canAccessAdminArea
+      ? '<button class="portal-switch" type="button" data-switch-area>⇄ Trocar de área</button>'
+      : '';
 
     return '<div class="portal-shell"><aside class="portal-sidebar"><div class="portal-logo"><img src="img/assofig.jpg" alt=""><strong>ASSOFIG<small>' +
       (director ? 'Painel da diretoria' : 'Portal do associado') + '</small></strong></div><div class="portal-user"><div class="avatar">' +
       escapeHtml(initials) + '</div><div><strong>' + escapeHtml(name) + '</strong><small>' +
       escapeHtml(director ? 'Diretoria' : profile?.profession || 'Associado') + '</small></div></div><nav class="portal-nav">' +
-      nav + '</nav><button class="portal-logout" type="button">← Sair da área privativa</button></aside><main class="portal-main">' +
+      nav + '</nav>' + switchAction + '<button class="portal-logout" type="button">← Sair da área privativa</button></aside><main class="portal-main">' +
       content + '</main></div>';
   }
 
   function bindPortalCommon(portal) {
     $('.portal-logout', portal)?.addEventListener('click', logout);
+    $('[data-switch-area]', portal)?.addEventListener('click', showAccessHub);
     $$('[data-portal-target]', portal).forEach(button => button.addEventListener('click', () => {
       $('#' + button.dataset.portalTarget, portal)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }));
   }
+  function hidePrivateAreas() {
+    ['access-portal', 'member-portal', 'admin-portal'].forEach(id => { $('#' + id).hidden = true; });
+  }
+
   function logout() {
     localStorage.removeItem('assofig_token');
-    privateState = { profile: null, role: null, members: [] };
-    $('#member-portal').hidden = true;
-    $('#admin-portal').hidden = true;
+    privateState = { profile: null, access: null, members: [], loginResponse: null };
+    hidePrivateAreas();
     document.body.classList.remove('modal-open');
     toast('Sessão encerrada.');
   }
 
   function showSessionExpired() {
-    $('#member-portal').hidden = true;
-    $('#admin-portal').hidden = true;
+    privateState = { profile: null, access: null, members: [], loginResponse: null };
+    hidePrivateAreas();
     document.body.classList.remove('modal-open');
     openModal('login-modal');
     toast('Sua sessão expirou. Entre novamente.');
   }
 
-  async function loadPrivateArea(requestedRole, loginRole) {
-    const token = localStorage.getItem('assofig_token');
-    if (!token) {
+  function accessCard(area, title, description, icon) {
+    return '<button class="access-card" type="button" data-access-area="' + area + '"><span class="access-card-icon" aria-hidden="true">' +
+      icon + '</span><strong>' + title + '</strong><span>' + description + '</span><em>Acessar <b>→</b></em></button>';
+  }
+
+  function showAccessHub() {
+    const access = privateState.access;
+    if (!access) return;
+    hidePrivateAreas();
+    const portal = $('#access-portal');
+    const cards = [];
+    if (access.canAccessMemberArea) {
+      cards.push(accessCard('member', 'Área do Associado', 'Consulte seus dados, mensalidades e pendências.', '♙'));
+    }
+    if (access.canAccessAdminArea) {
+      cards.push(accessCard('admin', 'Painel Administrativo', 'Gerencie associados e informações financeiras.', '▦'));
+    }
+    const content = cards.length
+      ? '<div class="access-options">' + cards.join('') + '</div>'
+      : '<div class="access-denied"><strong>Acesso não autorizado</strong><p>Seu usuário não possui uma área liberada. Entre em contato com a ASSOFIG.</p></div>';
+
+    portal.innerHTML = '<div class="access-hub"><header class="access-hub-header"><img src="img/assofig.jpg" alt="ASSOFIG"><div><span>Área privativa</span><h1>Escolha uma área</h1><p>Olá, ' +
+      escapeHtml(firstName(privateState.profile?.name)) + '. Selecione como deseja continuar.</p></div></header>' + content +
+      '<button class="access-logout" type="button">← Sair da área privativa</button></div>';
+    portal.hidden = false;
+    document.body.classList.add('modal-open');
+    $('[data-access-area]', portal).forEach(button => button.addEventListener('click', () => {
+      if (button.dataset.accessArea === 'admin') enterAdminArea();
+      else enterMemberArea();
+    }));
+    $('.access-logout', portal).addEventListener('click', logout);
+  }
+
+  async function enterMemberArea() {
+    if (!privateState.access?.canAccessMemberArea) {
+      toast('Acesso não autorizado à Área do Associado.');
+      showAccessHub();
+      return;
+    }
+    hidePrivateAreas();
+    const portal = $('#member-portal');
+    portal.hidden = false;
+    try {
+      await renderMemberPortal(privateState.profile);
+    } catch (error) {
+      if (error.status === 403) {
+        portal.hidden = true;
+        showAccessHub();
+        toast('Acesso não autorizado a este recurso da Área do Associado.');
+        return;
+      }
+      if (error.status !== 401) toast(error.message || 'Não foi possível carregar a Área do Associado.');
+    }
+  }
+
+  async function enterAdminArea() {
+    if (!privateState.access?.canAccessAdminArea) {
+      toast('Acesso não autorizado ao Painel Administrativo.');
+      showAccessHub();
+      return;
+    }
+    hidePrivateAreas();
+    const portal = $('#admin-portal');
+    portal.hidden = false;
+    try {
+      await renderAdminPortal(privateState.profile);
+    } catch (error) {
+      if (error.status === 403) {
+        portal.hidden = true;
+        showAccessHub();
+        toast('Acesso não autorizado ao Painel Administrativo.');
+        return;
+      }
+      if (error.status !== 401) toast(error.message || 'Não foi possível carregar o Painel Administrativo.');
+    }
+  }
+
+  async function initializeRestrictedArea(loginResponse) {
+    if (!localStorage.getItem('assofig_token')) {
       openModal('login-modal');
       toast('Entre para acessar a área privativa.');
       return;
     }
 
-    const loadingPortal = requestedRole === 'admin' ? $('#admin-portal') : $('#member-portal');
-    loadingPortal.innerHTML = portalLayout(requestedRole === 'admin' ? 'admin' : 'member', null, loadingContent('Carregando área restrita'));
-    loadingPortal.hidden = false;
+    hidePrivateAreas();
+    const portal = $('#access-portal');
+    portal.innerHTML = '<div class="access-hub">' + loadingContent('Validando seu acesso') + '</div>';
+    portal.hidden = false;
     document.body.classList.add('modal-open');
 
     try {
       const response = await AssofigAPI.getProfile();
-      const profile = normalizeMember(response);
-      const raw = unwrap(response) || {};
-      const actualRole = isDirectorRole(profile.role || raw.role || raw.tipo || loginRole) ? 'admin' : 'member';
-
-      if (requestedRole === 'admin' && actualRole !== 'admin') {
-        const error = new Error('Você não possui permissão para acessar a área da diretoria.');
-        error.status = 403;
-        throw error;
+      if (requiresPasswordChange(response) || requiresPasswordChange(loginResponse)) {
+        portal.hidden = true;
+        openModal('mandatory-password-modal');
+        return;
       }
-
-      $('#member-portal').hidden = actualRole !== 'member';
-      $('#admin-portal').hidden = actualRole !== 'admin';
-      privateState.profile = profile;
-      privateState.role = actualRole;
-
-      if (actualRole === 'admin') await renderAdminPortal(profile);
-      else await renderMemberPortal(profile);
+      privateState.loginResponse = loginResponse || privateState.loginResponse;
+      privateState.access = buildAccessContext(response, privateState.loginResponse);
+      privateState.profile = privateState.access.profile;
+      showAccessHub();
     } catch (error) {
-      loadingPortal.hidden = true;
+      portal.hidden = true;
       document.body.classList.remove('modal-open');
-      if (error.status === 401 || error.status === 403) {
-        localStorage.removeItem('assofig_token');
-        openModal('login-modal');
+      if (error.status === 403) {
+        portal.innerHTML = '<div class="access-hub"><div class="access-denied"><strong>Acesso não autorizado</strong><p>Não foi possível consultar as permissões deste usuário.</p><button class="btn btn-blue access-logout" type="button">Sair</button></div></div>';
+        portal.hidden = false;
+        document.body.classList.add('modal-open');
+        $('.access-logout', portal).addEventListener('click', logout);
       }
-      toast(error.message || 'Não foi possível carregar a área restrita.');
+      if (error.status !== 401) toast(error.message || 'Não foi possível validar seu acesso.');
     }
   }
 
@@ -322,6 +450,8 @@
     bindPortalCommon(portal);
 
     const results = await Promise.allSettled([AssofigAPI.getMyDefaults(), AssofigAPI.getPixInfo()]);
+    const forbidden = results.find(result => result.status === 'rejected' && result.reason?.status === 403);
+    if (forbidden) throw forbidden.reason;
     const defaultsLoaded = results[0].status === 'fulfilled';
     const defaults = defaultsLoaded
       ? toArray(results[0].value, ['defaults', 'inadimplencias']).map(normalizeDefault)
@@ -417,6 +547,11 @@
       bindPortalCommon(portal);
       bindAdmin(portal);
     } catch (error) {
+      if (error.status === 403) {
+        $('.portal-main', portal).innerHTML = '<div class="error-state"><h2>Acesso não autorizado.</h2><p>Seu usuário não possui permissão para consultar os associados.</p></div>';
+        return;
+      }
+      if (error.status === 401) return;
       $('.portal-main', portal).innerHTML = '<div class="error-state"><h2>Não foi possível carregar os associados.</h2><p>' +
         escapeHtml(error.message) + '</p><button class="btn btn-blue" data-retry-members>Tentar novamente</button></div>';
       $('[data-retry-members]', portal)?.addEventListener('click', () => renderAdminPortal(profile));
@@ -624,7 +759,6 @@
     event.preventDefault();
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form));
-    const requestedRole = data.role;
     const button = $('button[type=submit]', form);
     localStorage.removeItem('assofig_token');
     button.disabled = true;
@@ -635,9 +769,10 @@
       const token = result?.token || result?.accessToken || result?.data?.token || result?.data?.accessToken;
       if (!token) throw new Error('A API não retornou um token de autenticação.');
       localStorage.setItem('assofig_token', token);
+      privateState.loginResponse = result;
       closeModals();
-      const loginRole = result?.role || result?.user?.role || result?.data?.role || result?.data?.user?.role;
-      await loadPrivateArea(requestedRole, loginRole);
+      if (requiresPasswordChange(result)) openModal('mandatory-password-modal');
+      else await initializeRestrictedArea(result);
     } catch (error) {
       localStorage.removeItem('assofig_token');
       toast(error.message || 'Não foi possível entrar.');
@@ -665,7 +800,9 @@
     }
   });
 
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeModals(); });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && $('#mandatory-password-modal').hidden) closeModals();
+  });
   $('.menu-toggle').addEventListener('click', event => {
     const nav = $('.main-nav');
     nav.classList.toggle('open');
@@ -681,7 +818,7 @@
   });
 
   const backToTop = $('.back-to-top');
-  const scrollPortals = [$('#member-portal'), $('#admin-portal')];
+  const scrollPortals = [$('#access-portal'), $('#member-portal'), $('#admin-portal')];
   const activeScrollContainer = () => scrollPortals.find(portal => !portal.hidden) || null;
   const currentScrollTop = () => activeScrollContainer()?.scrollTop || window.scrollY || document.documentElement.scrollTop;
   const updateBackToTop = () => {
@@ -739,6 +876,40 @@
     }
   });
 
+  $('#mandatory-password-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const password = form.elements.password;
+    const confirmation = form.elements.passwordConfirmation;
+    const button = $('button[type=submit]', form);
+    confirmation.setCustomValidity('');
+    if (password.value !== confirmation.value) {
+      confirmation.setCustomValidity('As senhas precisam ser iguais.');
+      confirmation.reportValidity();
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = 'Salvando...';
+    try {
+      const result = await AssofigAPI.changePassword({
+        password: password.value,
+        passwordConfirmation: confirmation.value
+      });
+      const renewedToken = result?.token || result?.accessToken || result?.data?.token || result?.data?.accessToken;
+      if (renewedToken) localStorage.setItem('assofig_token', renewedToken);
+      privateState.loginResponse = null;
+      form.reset();
+      closeModals();
+      toast('Senha alterada com sucesso.');
+      await initializeRestrictedArea();
+    } catch (error) {
+      if (error.status !== 401) toast(error.message || 'Não foi possível alterar a senha.');
+    } finally {
+      button.disabled = false;
+      button.innerHTML = 'Salvar nova senha <span>→</span>';
+    }
+  });
   $('#login-form').addEventListener('submit', handleLogin);
 
   $('#signup-form').addEventListener('submit', async event => {
@@ -797,6 +968,6 @@
   window.addEventListener('assofig:session-expired', showSessionExpired);
 
   if (localStorage.getItem('assofig_token')) {
-    loadPrivateArea();
+    initializeRestrictedArea();
   }
 })();

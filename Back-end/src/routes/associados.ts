@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
-import { authenticate, authorize, requirePasswordChangeCompleted } from '../middleware/auth.js';
+import { authenticate, requireMemberLink, requirePasswordChangeCompleted } from '../middleware/auth.js';
 import { ApiError } from '../utils/api-error.js';
 
 export const associadosRouter = Router();
 
-associadosRouter.get('/me', authenticate, requirePasswordChangeCompleted, authorize('member'), async (req, res) => {
+associadosRouter.get('/me', authenticate, requirePasswordChangeCompleted, requireMemberLink, async (req, res) => {
   const result = await pool.query(
     `SELECT a.*, COALESCE(json_agg(json_build_object(
        'id', i.id, 'referenceMonth', i.reference_month, 'dueDate', i.due_date,

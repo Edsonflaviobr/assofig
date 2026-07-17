@@ -44,6 +44,9 @@ function installDatabaseMock(): void {
     if (sql.includes('SELECT must_change_password FROM users')) {
       return { rows: [{ must_change_password: mustChangePassword }], rowCount: 1 };
     }
+    if (sql.includes('SELECT u.associado_id')) {
+      return { rows: [{ associado_id: 90 }], rowCount: 1 };
+    }
     if (sql.includes('SELECT u.must_change_password AS')) {
       return {
         rows: [{

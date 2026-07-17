@@ -48,37 +48,56 @@ authRouter.post('/login', async (req, res) => {
   if (!user || !canUseRole || !(await bcrypt.compare(input.password, user.password_hash))) {
     throw new ApiError(401, 'E-mail, senha ou perfil inválido.');
   }
-  const token = signToken({ userId: user.id, role: input.role, associadoId: user.associado_id });
-  res.json({ token, role: input.role, mustChangePassword: Boolean(user.must_change_password), user: { id: user.id, name: user.name, email: user.email, profession: user.profession ?? null } });
+  const associadoId = user.associado_id === null ? null : Number(user.associado_id);
+  const permissions = {
+    canAccessMemberArea: associadoId !== null,
+    canAccessAdminArea: user.role === 'admin'
+  };
+  const token = signToken({ userId: Number(user.id), role: user.role, associadoId });
+  res.json({
+    token,
+    role: user.role,
+    mustChangePassword: Boolean(user.must_change_password),
+    permissions,
+    user: {
+      id: Number(user.id), name: user.name, email: user.email, role: user.role,
+      associadoId, profession: user.profession ?? null
+    }
+  });
 });
 
 authRouter.get('/me', authenticate, async (req, res) => {
   const result = await pool.query(
     `SELECT u.must_change_password AS "mustChangePassword", jsonb_build_object(
        'id', u.id, 'name', u.name, 'email', u.email, 'role', u.role, 'active', u.active,
-       'mustChangePassword', u.must_change_password
+       'associadoId', u.associado_id, 'mustChangePassword', u.must_change_password
      ) AS "user",
-     to_jsonb(a) || jsonb_build_object(
+     CASE WHEN a.id IS NULL THEN NULL ELSE to_jsonb(a) || jsonb_build_object(
        'inadimplencias', COALESCE(jsonb_agg(jsonb_build_object(
          'id', i.id, 'referenceMonth', i.reference_month, 'dueDate', i.due_date,
          'amount', i.amount::float, 'status', i.status, 'notes', i.notes
        ) ORDER BY i.due_date DESC) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb)
-     ) AS associado
+     ) END AS associado
      FROM users u
-     JOIN associados a ON a.id = u.associado_id
+     LEFT JOIN associados a ON a.id = u.associado_id
      LEFT JOIN inadimplencias i ON i.associado_id = a.id
      WHERE u.id = $1 AND u.active = TRUE
      GROUP BY u.id, a.id`,
     [req.auth!.userId]
   );
-  if (!result.rowCount) throw new ApiError(404, 'Associado não encontrado.');
+  if (!result.rowCount) throw new ApiError(404, 'Usuário não encontrado.');
   const profile = result.rows[0];
-  if (profile.mustChangePassword) {
+  const permissions = {
+    canAccessMemberArea: profile.associado !== null,
+    canAccessAdminArea: profile.user.role === 'admin'
+  };
+  if (profile.mustChangePassword && profile.associado) {
     const { id, name, email } = profile.associado;
-    res.json({ mustChangePassword: true, user: profile.user, associado: { id, name, email } });
+    const associado = { id, name, email };
+    res.json({ mustChangePassword: true, user: profile.user, permissions, member: associado, associado });
     return;
   }
-  res.json(profile);
+  res.json({ ...profile, permissions, member: profile.associado });
 });
 
 authRouter.post('/change-initial-password', authenticate, async (req, res) => {

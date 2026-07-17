@@ -18,6 +18,28 @@ export function authorize(...roles: Role[]) {
   };
 }
 
+export const requireAdmin = authorize('admin');
+
+export async function requireMemberLink(req: Request, _res: Response, next: NextFunction) {
+  if (!req.auth) return next(new ApiError(401, 'Token de acesso não informado.'));
+  try {
+    const result = await pool.query(
+      `SELECT u.associado_id
+       FROM users u
+       JOIN associados a ON a.id = u.associado_id
+       WHERE u.id = $1 AND u.active = TRUE`,
+      [req.auth.userId]
+    );
+    if (!result.rowCount) {
+      return next(new ApiError(403, 'Usuário sem vínculo com associado.'));
+    }
+    req.auth.associadoId = Number(result.rows[0].associado_id);
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function requirePasswordChangeCompleted(req: Request, _res: Response, next: NextFunction) {
   if (!req.auth) return next(new ApiError(401, 'Token de acesso não informado.'));
   try {

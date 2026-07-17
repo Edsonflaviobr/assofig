@@ -1,7 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
-import { authenticate, requirePasswordChangeCompleted } from '../middleware/auth.js';
+import { authenticate, requireMemberLink, requirePasswordChangeCompleted } from '../middleware/auth.js';
 import { ApiError } from '../utils/api-error.js';
 import { idSchema, moneySchema } from '../schemas/common.js';
 import { env } from '../config/env.js';
@@ -9,7 +9,7 @@ import { env } from '../config/env.js';
 export const pagamentosRouter = Router();
 export const paymentsPixRouter = Router();
 pagamentosRouter.use(authenticate, requirePasswordChangeCompleted);
-paymentsPixRouter.use(authenticate, requirePasswordChangeCompleted);
+paymentsPixRouter.use(authenticate, requirePasswordChangeCompleted, requireMemberLink);
 
 const paymentSchema = z.object({
   associadoId: idSchema.optional(),
@@ -23,7 +23,7 @@ const getPix: RequestHandler = (_req, res) => {
   res.json({ pixKey: env.PIX_KEY, receiverName: env.PIX_RECEIVER_NAME });
 };
 
-pagamentosRouter.get('/pix', getPix);
+pagamentosRouter.get('/pix', requireMemberLink, getPix);
 paymentsPixRouter.get('/', getPix);
 
 pagamentosRouter.get('/', async (req, res) => {

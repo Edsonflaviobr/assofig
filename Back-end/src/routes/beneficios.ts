@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize, requirePasswordChangeCompleted } from '../middleware/auth.js';
+import { authenticate, requireMemberLink, requirePasswordChangeCompleted } from '../middleware/auth.js';
 
 export const beneficiosRouter = Router();
-beneficiosRouter.get('/historico', authenticate, requirePasswordChangeCompleted, authorize('member'), (_req, res) => res.json([]));
+beneficiosRouter.get('/historico', authenticate, requirePasswordChangeCompleted, requireMemberLink, (_req, res) => res.json([]));

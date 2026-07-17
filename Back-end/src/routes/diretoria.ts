@@ -3,15 +3,15 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { transaction } from '../db/transaction.js';
-import { authenticate, authorize, requirePasswordChangeCompleted } from '../middleware/auth.js';
+import { authenticate, requireAdmin, requirePasswordChangeCompleted } from '../middleware/auth.js';
 import { ApiError } from '../utils/api-error.js';
 import { dateSchema, emailSchema, idSchema, moneySchema } from '../schemas/common.js';
 import { documentSchema, readDocumentInput } from '../utils/document.js';
 
 export const diretoriaRouter = Router();
 export const membersRouter = Router();
-diretoriaRouter.use(authenticate, requirePasswordChangeCompleted, authorize('admin'));
-membersRouter.use(authenticate, requirePasswordChangeCompleted, authorize('admin'));
+diretoriaRouter.use(authenticate, requirePasswordChangeCompleted, requireAdmin);
+membersRouter.use(authenticate, requirePasswordChangeCompleted, requireAdmin);
 
 const memberSchema = z.object({
   name: z.string().trim().min(3).max(160),
@@ -25,11 +25,36 @@ const memberSchema = z.object({
   password: z.string().min(6).max(200).optional()
 });
 
+function parseReferenceMonth(reference: string | undefined): string | undefined {
+  if (!reference) return undefined;
+  const monthYear = reference.match(/(?:^|\D)(0?[1-9]|1[0-2])\/(\d{4})(?:\D|$)/);
+  const month = monthYear?.[1];
+  const year = monthYear?.[2];
+  if (month && year) return `${year}-${month.padStart(2, '0')}-01`;
+  const yearMonth = reference.match(/^(\d{4})-(0[1-9]|1[0-2])(?:-\d{2})?$/);
+  const isoYear = yearMonth?.[1];
+  const isoMonth = yearMonth?.[2];
+  if (isoYear && isoMonth) return `${isoYear}-${isoMonth}-01`;
+  return undefined;
+}
+
 const delinquencySchema = z.object({
-  referenceMonth: dateSchema,
+  referenceMonth: dateSchema.optional(),
+  reference: z.string().trim().min(1).max(160).optional(),
   dueDate: dateSchema,
   amount: moneySchema,
   notes: z.string().trim().max(1000).optional()
+}).transform((input, context) => {
+  const referenceMonth = input.referenceMonth ?? parseReferenceMonth(input.reference);
+  if (!referenceMonth) {
+    context.addIssue({
+      code: 'custom',
+      path: ['reference'],
+      message: 'Informe uma referência com mês e ano válidos.'
+    });
+    return z.NEVER;
+  }
+  return { ...input, referenceMonth };
 });
 
 async function syncFinancialStatus(client: { query: Function }, associadoId: number) {
@@ -50,6 +75,12 @@ const listAssociados: RequestHandler = async (req, res) => {
        AND ($2::text IS NULL OR a.name ILIKE '%' || $2 || '%' OR a.email ILIKE '%' || $2 || '%' OR a.document = regexp_replace($2, '\D', '', 'g'))
      GROUP BY a.id ORDER BY a.name`, [status ?? null, search ?? null]);
   res.json(result.rows);
+};
+
+const getAssociado: RequestHandler = async (req, res) => {
+  const result = await pool.query('SELECT * FROM associados WHERE id = $1', [idSchema.parse(req.params.id)]);
+  if (!result.rowCount) throw new ApiError(404, 'Associado não encontrado.');
+  res.json(result.rows[0]);
 };
 
 const createAssociado: RequestHandler = async (req, res) => {
@@ -111,7 +142,11 @@ const deleteAssociado: RequestHandler = async (req, res) => {
 };
 
 const listInadimplencias: RequestHandler = async (req, res) => {
-  const result = await pool.query('SELECT *, amount::float AS amount FROM inadimplencias WHERE associado_id=$1 ORDER BY due_date DESC', [idSchema.parse(req.params.id)]);
+  const result = await pool.query(
+    `SELECT *, to_char(reference_month, 'MM/YYYY') AS reference, amount::float AS amount
+     FROM inadimplencias WHERE associado_id=$1 ORDER BY due_date DESC`,
+    [idSchema.parse(req.params.id)]
+  );
   res.json(result.rows);
 };
 
@@ -121,7 +156,8 @@ const createInadimplencia: RequestHandler = async (req, res) => {
   const item = await transaction(async (client) => {
     const result = await client.query(
       `INSERT INTO inadimplencias (associado_id, reference_month, due_date, amount, notes)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *, amount::float AS amount`,
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING *, to_char(reference_month, 'MM/YYYY') AS reference, amount::float AS amount`,
       [associadoId, input.referenceMonth, input.dueDate, input.amount, input.notes ?? null]);
     await syncFinancialStatus(client, associadoId);
     return result.rows[0];
@@ -134,7 +170,8 @@ const regularizeInadimplencia: RequestHandler = async (req, res) => {
   const item = await transaction(async (client) => {
     const result = await client.query(
       `UPDATE inadimplencias SET status='resolved', resolved_at=NOW(), updated_at=NOW()
-       WHERE id=$1 AND associado_id=$2 RETURNING *, amount::float AS amount`,
+       WHERE id=$1 AND associado_id=$2
+       RETURNING *, to_char(reference_month, 'MM/YYYY') AS reference, amount::float AS amount`,
       [idSchema.parse(req.params.inadimplenciaId), associadoId]);
     if (!result.rowCount) throw new ApiError(404, 'Inadimplência não encontrada.');
     await syncFinancialStatus(client, associadoId);
@@ -144,6 +181,7 @@ const regularizeInadimplencia: RequestHandler = async (req, res) => {
 };
 
 diretoriaRouter.get('/associados', listAssociados);
+diretoriaRouter.get('/associados/:id', getAssociado);
 diretoriaRouter.post('/associados', createAssociado);
 diretoriaRouter.put('/associados/:id', updateAssociado);
 diretoriaRouter.delete('/associados/:id', deleteAssociado);
@@ -152,6 +190,7 @@ diretoriaRouter.post('/associados/:id/inadimplencias', createInadimplencia);
 diretoriaRouter.patch('/associados/:id/inadimplencias/:inadimplenciaId/regularizar', regularizeInadimplencia);
 
 membersRouter.get('/', listAssociados);
+membersRouter.get('/:id', getAssociado);
 membersRouter.post('/', createAssociado);
 membersRouter.put('/:id', updateAssociado);
 membersRouter.delete('/:id', deleteAssociado);
