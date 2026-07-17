@@ -33,7 +33,7 @@ Back-end/
 |   |-- routes/              Endpoints REST
 |   |-- schemas/             Validações compartilhadas
 |   |-- utils/               JWT, CPF/CNPJ e erros da API
-|   |-- app.mts              Configuração ESM do Express e entrypoint da Vercel
+|   |-- app.ts               Configuração ESM do Express e entrypoint da Vercel
 |   `-- local.ts             Inicialização exclusiva do servidor local
 |-- tests/                   Testes automatizados
 |-- .env.example             Exemplo de configuração
@@ -368,7 +368,7 @@ Em produção, use uma senha forte para o PostgreSQL, um `JWT_SECRET` longo e ex
 
 ## Deploy na Vercel
 
-A Vercel detecta automaticamente `src/app.mts` como uma aplicação Express e a publica como uma única Vercel Function. O projeto não usa `vercel.json` nem rewrites manuais.
+A Vercel detecta automaticamente `src/app.ts` como uma aplicação Express e a publica como uma única Vercel Function. O projeto não usa `vercel.json` nem rewrites manuais.
 
 No projeto da Vercel:
 
