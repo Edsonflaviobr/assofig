@@ -30,3 +30,5 @@ html,body{max-width:100%;overflow-x:hidden;overflow-x:clip}.hero-copy,.hero-visu
 .photo-caption{text-align:right;justify-items:end;padding-left:145px}.photo-caption strong,.photo-caption span{max-width:100%}
 @media(max-width:520px){.photo-caption{padding-left:112px;padding-right:16px}}
 #forgot-password-form{display:grid;gap:18px;margin-top:24px}
+
+.board-email{display:inline-block;margin-top:5px;color:var(--blue-dark);font-size:12px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}.board-email:hover{text-decoration:underline}.board-card.featured .board-email{color:#d8ffc5}
