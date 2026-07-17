@@ -11,19 +11,19 @@ type SeedMember = {
 };
 
 const members: SeedMember[] = [
-  { name: 'Edson Flavio de Sousa', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'edson.sousa@assofig.local', document: '11995365637', isBoardMember: true },
-  { name: 'Jamili Dias Bernardino', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'jamili.bernardino@assofig.local', document: '08135543654', isBoardMember: true },
+  { name: 'Edson Flavio de Sousa', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'edsonmflavio@gmail.com', document: '11995365637', isBoardMember: true },
+  { name: 'Jamili Dias Bernardino', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'milli_dias@yahoo.com.br', document: '08135543654', isBoardMember: true },
   { name: 'Gabriel Possidonio Goulart', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'gabriel.goulart@assofig.local', document: '07975711675', isBoardMember: true },
   { name: 'Verônica dos Reis Ruela', profession: 'Fisioterapeuta', city: 'Muzambinho', email: 'veronica.ruela@assofig.local', document: '10675640636', isBoardMember: true },
   { name: 'Marcella de Túlio do Prado', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'marcella.prado@assofig.local', document: null, isBoardMember: true },
   { name: 'Fernando Ferreira da Silva', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'fernando.silva@assofig.local', document: '05189368645' },
   { name: 'Isabela Verônica de Abreu Melo', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'isabela.melo@assofig.local', document: '07983952651' },
   { name: 'Thays Cristina Reis Olimpio', profession: 'Terapeuta Ocupacional', city: 'Muzambinho', email: 'thays.olimpio@assofig.local', document: '04675953646' },
-  { name: 'Saulo Nani Leite', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'saulo.leite@assofig.local', document: '04060090662' },
+  { name: 'Saulo Nani Leite', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'saulo1979@gmail.com', document: '04060090662' },
   { name: 'Renata Cristina Martins da Silva Vieira', profession: 'Fisioterapeuta', city: 'Muzambinho', email: 'renata.vieira@assofig.local', document: '30209360801' },
-  { name: 'Talita Andrea Bordini Malaman', profession: 'Fisioterapeuta', city: 'Porto Ferreira', email: 'talita.malaman@assofig.local', document: '22345377895' },
-  { name: 'Angela Maria Paiva Magri', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'angela.magri@assofig.local', document: '08149261699' },
-  { name: 'Isabela Scali Lourenço Simon', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'isabela.simon@assofig.local', document: '04202106601' }
+  { name: 'Talita Andrea Bordini Malaman', profession: 'Fisioterapeuta', city: 'Porto Ferreira', email: 'tamalaman@gmail.com', document: '22345377895' },
+  { name: 'Angela Maria Paiva Magri', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'minasangel@yahoo.com.br', document: '08149261699' },
+  { name: 'Isabela Scali Lourenço Simon', profession: 'Fisioterapeuta', city: 'Guaxupé', email: 'isabela.scali@hotmail.com', document: '04202106601' }
 ];
 
 async function main() {
