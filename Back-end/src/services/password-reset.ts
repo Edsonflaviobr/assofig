@@ -58,7 +58,7 @@ export async function resetPassword(token: string, password: string): Promise<bo
     if (!resetToken) return false;
 
     const userResult = await client.query(
-      'UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1 AND active = TRUE RETURNING id',
+      'UPDATE users SET password_hash = $2, must_change_password = FALSE, updated_at = NOW() WHERE id = $1 AND active = TRUE RETURNING id',
       [resetToken.user_id, passwordHash]
     );
     if (!userResult.rowCount) return false;

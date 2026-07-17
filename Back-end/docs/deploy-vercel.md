@@ -29,13 +29,16 @@ Cadastre em **Project Settings > Environment Variables**:
 | `DATABASE_URL` | Connection string do pooler do Supabase com SSL |
 | `JWT_SECRET` | Segredo exclusivo com pelo menos 32 caracteres |
 | `JWT_EXPIRES_IN` | Por exemplo, `8h` |
+| `SEED_PASSWORD` | Senha inicial forte dos novos associados; obrigatória no backend |
 | `CORS_ORIGIN` | URL exata do front-end publicado |
 | `FRONTEND_URL` | Origem do front-end usada no link de redefinição |
 | `EMAIL_PROVIDER` | `resend` |
 | `RESEND_API_KEY` | Chave secreta do Resend |
 | `EMAIL_FROM` | Remetente de domínio verificado no Resend |
+| `PIX_KEY` | Chave PIX da ASSOFIG |
+| `PIX_RECEIVER_NAME` | Nome do favorecido, por exemplo `ASSOFIG` |
 
-Não é necessário configurar `PORT` na Vercel. `SEED_PASSWORD` só é necessária ao executar o seed e não deve permanecer no ambiente da aplicação se não for usada.
+Não é necessário configurar `PORT` na Vercel. `SEED_PASSWORD` é obrigatória no backend porque também define a senha inicial dos novos associados cadastrados pela diretoria.
 
 Para o Supabase, copie a connection string no painel em **Connect**. Para execução serverless, use preferencialmente o **Transaction pooler** e mantenha SSL habilitado. A URL pública `https://<projeto>.supabase.co` não substitui a connection string PostgreSQL.
 
@@ -49,14 +52,14 @@ Se a senha contiver caracteres especiais, use a connection string fornecida pelo
 
 ## Migrações e seed
 
-Migrações não são executadas no build da Vercel. A migration `003_password_reset_tokens.sql` é obrigatória para o fluxo de recuperação de senha. Antes do primeiro deploy funcional, use a `DATABASE_URL` de produção em um `.env` local seguro e execute:
+Migrações não são executadas no build da Vercel. As migrations `003_password_reset_tokens.sql` e `005_must_change_password.sql` são obrigatórias para recuperação e troca inicial de senha. Antes do primeiro deploy funcional, use a `DATABASE_URL` de produção em um `.env` local seguro e execute:
 
 ```powershell
 npm run db:migrate
 npm run db:seed
 ```
 
-Depois remova `SEED_PASSWORD` da Vercel se ela tiver sido cadastrada temporariamente. O arquivo `.env` não deve ser enviado ao Git.
+Mantenha `SEED_PASSWORD` configurada na Vercel e nunca a exponha ao frontend. O arquivo `.env` não deve ser enviado ao Git.
 
 ## Deploy e verificação
 

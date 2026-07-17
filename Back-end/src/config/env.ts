@@ -11,7 +11,10 @@ const schema = z.object({
   FRONTEND_URL: z.url().default('http://localhost:5500'),
   EMAIL_PROVIDER: z.enum(['disabled', 'resend']).default('disabled'),
   RESEND_API_KEY: z.string().min(1).optional(),
-  EMAIL_FROM: z.email().optional()
+  EMAIL_FROM: z.email().optional(),
+  SEED_PASSWORD: z.string().min(6).max(200),
+  PIX_KEY: z.string().default(''),
+  PIX_RECEIVER_NAME: z.string().default('ASSOFIG')
 }).superRefine((values, context) => {
   if (values.NODE_ENV !== 'production') return;
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { emailSchema } from '../schemas/common.js';
 import { documentSchema, readDocumentInput } from '../utils/document.js';
+import { sendApplicationEmail, sendContactEmail } from '../services/email.js';
 
 export const publicRouter = Router();
 
@@ -29,6 +30,11 @@ publicRouter.post('/inscricoes', async (req, res) => {
     `INSERT INTO inscricoes (name,profession,email,document,phone,registry,city)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,status`,
     [input.name, input.profession, input.email, input.document, input.phone, input.registry ?? null, input.city]);
+  try {
+    await sendApplicationEmail(input);
+  } catch {
+    console.error('Falha ao enviar solicitação de associação por e-mail.');
+  }
   res.status(201).json(result.rows[0]);
 });
 
@@ -36,6 +42,11 @@ publicRouter.post('/contato', async (req, res) => {
   const input = contactSchema.parse(req.body);
   await pool.query('INSERT INTO contatos (name,email,subject,message) VALUES ($1,$2,$3,$4)',
     [input.name, input.email, input.subject, input.message]);
+  try {
+    await sendContactEmail(input);
+  } catch {
+    console.error('Falha ao enviar contato do site por e-mail.');
+  }
   res.status(201).json({ sent: true });
 });
 

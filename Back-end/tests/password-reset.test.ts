@@ -130,6 +130,7 @@ describe('recuperação de senha', () => {
     expect(response.status).toBe(200);
     expect(response.body.message).toBe('Senha redefinida com sucesso.');
     expect(await bcrypt.compare('NovaSenha#2026', passwordHash)).toBe(true);
+    expect(clientQuery.mock.calls.some(([sql]) => String(sql).includes('must_change_password = FALSE'))).toBe(true);
     expect(clientQuery.mock.calls.some(([sql]) => String(sql).includes('SET used_at = NOW()'))).toBe(true);
   });
 

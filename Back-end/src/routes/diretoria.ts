@@ -1,15 +1,17 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { transaction } from '../db/transaction.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, authorize, requirePasswordChangeCompleted } from '../middleware/auth.js';
 import { ApiError } from '../utils/api-error.js';
 import { dateSchema, emailSchema, idSchema, moneySchema } from '../schemas/common.js';
 import { documentSchema, readDocumentInput } from '../utils/document.js';
 
 export const diretoriaRouter = Router();
-diretoriaRouter.use(authenticate, authorize('admin'));
+export const membersRouter = Router();
+diretoriaRouter.use(authenticate, requirePasswordChangeCompleted, authorize('admin'));
+membersRouter.use(authenticate, requirePasswordChangeCompleted, authorize('admin'));
 
 const memberSchema = z.object({
   name: z.string().trim().min(3).max(160),
@@ -38,7 +40,7 @@ async function syncFinancialStatus(client: { query: Function }, associadoId: num
   await client.query('UPDATE associados SET status = $2, updated_at = NOW() WHERE id = $1', [associadoId, status]);
 }
 
-diretoriaRouter.get('/associados', async (req, res) => {
+const listAssociados: RequestHandler = async (req, res) => {
   const status = z.enum(['active', 'late', 'pending']).optional().parse(req.query.status);
   const search = z.string().trim().max(160).optional().parse(req.query.search);
   const result = await pool.query(
@@ -48,20 +50,21 @@ diretoriaRouter.get('/associados', async (req, res) => {
        AND ($2::text IS NULL OR a.name ILIKE '%' || $2 || '%' OR a.email ILIKE '%' || $2 || '%' OR a.document = regexp_replace($2, '\D', '', 'g'))
      GROUP BY a.id ORDER BY a.name`, [status ?? null, search ?? null]);
   res.json(result.rows);
-});
+};
 
-diretoriaRouter.post('/associados', async (req, res) => {
+const createAssociado: RequestHandler = async (req, res) => {
   const input = memberSchema.parse({ ...req.body, document: readDocumentInput(req.body) });
+  const initialPassword = process.env.SEED_PASSWORD;
+  if (!initialPassword) throw new ApiError(500, 'Configuração da senha inicial indisponível.');
+  const passwordHash = await bcrypt.hash(initialPassword, 12);
   const member = await transaction(async (client) => {
     const result = await client.query(
       `INSERT INTO associados (name, profession, email, document, phone, registry, city, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
       [input.name, input.profession, input.email, input.document ?? null, input.phone ?? null, input.registry ?? null, input.city, input.status]);
-    if (input.password) {
-      await client.query(
-        `INSERT INTO users (email, password_hash, role, name, associado_id) VALUES ($1,$2,'member',$3,$4)`,
-        [input.email, await bcrypt.hash(input.password, 12), input.name, result.rows[0].id]);
-    }
+    await client.query(
+      `INSERT INTO users (email, password_hash, role, name, associado_id, must_change_password) VALUES ($1,$2,'member',$3,$4,TRUE)`,
+      [input.email, passwordHash, input.name, result.rows[0].id]);
     if (input.status === 'late') {
       await client.query(
         `INSERT INTO inadimplencias (associado_id, reference_month, due_date, amount, notes)
@@ -71,9 +74,9 @@ diretoriaRouter.post('/associados', async (req, res) => {
     return result.rows[0];
   });
   res.status(201).json(member);
-});
+};
 
-diretoriaRouter.put('/associados/:id', async (req, res) => {
+const updateAssociado: RequestHandler = async (req, res) => {
   const id = idSchema.parse(req.params.id);
   const rawDocument = readDocumentInput(req.body);
   const input = memberSchema.partial().parse(rawDocument === undefined ? req.body : { ...req.body, document: rawDocument });
@@ -99,20 +102,20 @@ diretoriaRouter.put('/associados/:id', async (req, res) => {
     return result.rows[0];
   });
   res.json(updated);
-});
+};
 
-diretoriaRouter.delete('/associados/:id', async (req, res) => {
+const deleteAssociado: RequestHandler = async (req, res) => {
   const result = await pool.query('DELETE FROM associados WHERE id = $1 RETURNING id', [idSchema.parse(req.params.id)]);
   if (!result.rowCount) throw new ApiError(404, 'Associado não encontrado.');
   res.json(result.rows[0]);
-});
+};
 
-diretoriaRouter.get('/associados/:id/inadimplencias', async (req, res) => {
+const listInadimplencias: RequestHandler = async (req, res) => {
   const result = await pool.query('SELECT *, amount::float AS amount FROM inadimplencias WHERE associado_id=$1 ORDER BY due_date DESC', [idSchema.parse(req.params.id)]);
   res.json(result.rows);
-});
+};
 
-diretoriaRouter.post('/associados/:id/inadimplencias', async (req, res) => {
+const createInadimplencia: RequestHandler = async (req, res) => {
   const associadoId = idSchema.parse(req.params.id);
   const input = delinquencySchema.parse(req.body);
   const item = await transaction(async (client) => {
@@ -124,9 +127,9 @@ diretoriaRouter.post('/associados/:id/inadimplencias', async (req, res) => {
     return result.rows[0];
   });
   res.status(201).json(item);
-});
+};
 
-diretoriaRouter.patch('/associados/:id/inadimplencias/:inadimplenciaId/regularizar', async (req, res) => {
+const regularizeInadimplencia: RequestHandler = async (req, res) => {
   const associadoId = idSchema.parse(req.params.id);
   const item = await transaction(async (client) => {
     const result = await client.query(
@@ -138,4 +141,20 @@ diretoriaRouter.patch('/associados/:id/inadimplencias/:inadimplenciaId/regulariz
     return result.rows[0];
   });
   res.json(item);
-});
+};
+
+diretoriaRouter.get('/associados', listAssociados);
+diretoriaRouter.post('/associados', createAssociado);
+diretoriaRouter.put('/associados/:id', updateAssociado);
+diretoriaRouter.delete('/associados/:id', deleteAssociado);
+diretoriaRouter.get('/associados/:id/inadimplencias', listInadimplencias);
+diretoriaRouter.post('/associados/:id/inadimplencias', createInadimplencia);
+diretoriaRouter.patch('/associados/:id/inadimplencias/:inadimplenciaId/regularizar', regularizeInadimplencia);
+
+membersRouter.get('/', listAssociados);
+membersRouter.post('/', createAssociado);
+membersRouter.put('/:id', updateAssociado);
+membersRouter.delete('/:id', deleteAssociado);
+membersRouter.get('/:id/inadimplencias', listInadimplencias);
+membersRouter.post('/:id/inadimplencias', createInadimplencia);
+membersRouter.patch('/:id/inadimplencias/:inadimplenciaId/regularizar', regularizeInadimplencia);

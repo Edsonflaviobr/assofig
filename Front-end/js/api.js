@@ -1,26 +1,32 @@
 (function () {
-  const API_BASE_URL =
-    window.ASSOFIG_API_URL ||
-    'https://assofig-api.vercel.app/api';
-
-  const USE_MOCKS = window.ASSOFIG_USE_MOCKS === true;
+  const API_BASE_URL = window.ASSOFIG_API_URL || 'https://assofig-api.vercel.app/api';
 
   const routes = {
     login: '/auth/login',
     forgotPassword: '/auth/forgot-password',
-    profile: '/associados/me',
-    members: '/diretoria/associados',
-    payments: '/pagamentos',
-    benefits: '/beneficios/historico',
+    profile: '/auth/me',
+    profileFallback: '/profile',
+    members: '/members',
     applications: '/inscricoes',
     contact: '/contato',
+    pix: '/payments/pix',
+    myDefaults: '/auth/me/inadimplencias',
+    myDefaultsFallback: '/profile/inadimplencias',
     news: '/noticias',
     events: '/eventos'
   };
 
+  class ApiError extends Error {
+    constructor(message, status, data) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+      this.data = data;
+    }
+  }
+
   async function request(path, options = {}) {
     const token = localStorage.getItem('assofig_token');
-
     let response;
 
     try {
@@ -28,226 +34,121 @@
         ...options,
         headers: {
           'Content-Type': 'application/json',
-          ...(token
-            ? {
-                Authorization: `Bearer ${token}`
-              }
-            : {}),
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
           ...options.headers
         }
       });
     } catch {
-      throw new Error('Não foi possível conectar à API.');
+      throw new ApiError('Não foi possível conectar à API.', 0);
     }
+
+    const data = response.status === 204 ? null : await response.json().catch(() => null);
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-
-      throw new Error(
-        errorData.message ||
-          'Não foi possível concluir a solicitação.'
+      const error = new ApiError(
+        data?.message || data?.error || 'Não foi possível concluir a solicitação.',
+        response.status,
+        data
       );
+
+      if ((response.status === 401 || response.status === 403) && token) {
+        localStorage.removeItem('assofig_token');
+        window.dispatchEvent(new CustomEvent('assofig:session-expired', { detail: { status: response.status } }));
+      }
+
+      throw error;
     }
 
-    return response.status === 204 ? null : response.json();
+    return data;
   }
 
-  async function withMock(remoteCall, mockCall) {
-    if (USE_MOCKS) {
-      return Promise.resolve().then(mockCall);
+  async function fallbackOnNotFound(primary, fallback) {
+    try {
+      return await primary();
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      return fallback();
     }
-
-    return remoteCall();
   }
+
+  const memberPath = id => routes.members + '/' + encodeURIComponent(id);
 
   window.AssofigAPI = {
-    config: {
-      baseUrl: API_BASE_URL,
-      useMocks: USE_MOCKS,
-      routes
-    },
+    config: { baseUrl: API_BASE_URL, routes },
 
     login: credentials =>
-      withMock(
-        () =>
-          request(routes.login, {
-            method: 'POST',
-            body: JSON.stringify(credentials)
-          }),
-        () => ({
-          token: 'token-demonstracao',
-          role: credentials.role,
-          user: {
-            name:
-              credentials.role === 'admin'
-                ? 'Diretoria ASSOFIG'
-                : 'Mariana Costa'
-          }
-        })
-      ),
+      request(routes.login, {
+        method: 'POST',
+        body: JSON.stringify(credentials)
+      }),
 
     forgotPassword: data =>
-      withMock(
-        () =>
-          request(routes.forgotPassword, {
-            method: 'POST',
-            body: JSON.stringify(data)
-          }),
-        () => ({
-          sent: true
-        })
-      ),
+      request(routes.forgotPassword, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+
     getProfile: () =>
-      withMock(
+      fallbackOnNotFound(
         () => request(routes.profile),
-        () => null
+        () => request(routes.profileFallback)
       ),
 
     submitApplication: data =>
-      withMock(
-        () =>
-          request(routes.applications, {
-            method: 'POST',
-            body: JSON.stringify(data)
-          }),
-        () => ({
-          id: Date.now(),
-          status: 'recebida'
-        })
-      ),
+      request(routes.applications, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
 
     sendContact: data =>
-      withMock(
-        () =>
-          request(routes.contact, {
-            method: 'POST',
-            body: JSON.stringify(data)
-          }),
-        () => ({
-          sent: true
-        })
-      ),
+      request(routes.contact, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
 
-    listNews: () =>
-      withMock(
-        () => request(routes.news),
-        () => []
-      ),
-
-    listEvents: () =>
-      withMock(
-        () => request(routes.events),
-        () => []
-      ),
-
-    listMembers: () =>
-      withMock(
-        () => request(routes.members),
-        () =>
-          JSON.parse(
-            localStorage.getItem('assofig_members') || '[]'
-          )
-      ),
+    listMembers: () => request(routes.members),
+    getMember: id => request(memberPath(id)),
 
     createMember: data =>
-      withMock(
-        () =>
-          request(routes.members, {
-            method: 'POST',
-            body: JSON.stringify(data)
-          }),
-        () => data
-      ),
+      request(routes.members, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
 
     updateMember: (id, data) =>
-      withMock(
-        () =>
-          request(`${routes.members}/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(data)
-          }),
-        () => data
-      ),
+      request(memberPath(id), {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      }),
 
     deleteMember: id =>
-      withMock(
-        () =>
-          request(`${routes.members}/${id}`, {
-            method: 'DELETE'
-          }),
-        () => ({
-          id
-        })
-      ),
+      request(memberPath(id), {
+        method: 'DELETE'
+      }),
 
-    listPayments: associadoId => {
-      const query = associadoId
-        ? `?associadoId=${encodeURIComponent(associadoId)}`
-        : '';
-
-      return withMock(
-        () => request(`${routes.payments}${query}`),
-        () => []
-      );
-    },
-
-    createPayment: data =>
-      withMock(
-        () =>
-          request(routes.payments, {
-            method: 'POST',
-            body: JSON.stringify(data)
-          }),
-        () => ({
-          id: Date.now(),
-          status: 'pendente',
-          ...data
-        })
-      ),
-
-    listBenefits: () =>
-      withMock(
-        () => request(routes.benefits),
-        () => []
+    getMyDefaults: () =>
+      fallbackOnNotFound(
+        () => request(routes.myDefaults),
+        () => request(routes.myDefaultsFallback)
       ),
 
     listMemberDefaults: id =>
-      withMock(
-        () =>
-          request(
-            `${routes.members}/${id}/inadimplencias`
-          ),
-        () => []
-      ),
+      request(memberPath(id) + '/inadimplencias'),
 
     createMemberDefault: (id, data) =>
-      withMock(
-        () =>
-          request(
-            `${routes.members}/${id}/inadimplencias`,
-            {
-              method: 'POST',
-              body: JSON.stringify(data)
-            }
-          ),
-        () => data
+      request(memberPath(id) + '/inadimplencias', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+
+    regularizeMemberDefault: (memberId, defaultId) =>
+      request(
+        memberPath(memberId) + '/inadimplencias/' + encodeURIComponent(defaultId) + '/regularizar',
+        { method: 'PATCH' }
       ),
 
-    regularizeMemberDefault: (
-      memberId,
-      inadimplenciaId
-    ) =>
-      withMock(
-        () =>
-          request(
-            `${routes.members}/${memberId}/inadimplencias/${inadimplenciaId}/regularizar`,
-            {
-              method: 'PATCH'
-            }
-          ),
-        () => ({
-          regularized: true
-        })
-      )
+    getPixInfo: () => request(routes.pix),
+    listNews: () => request(routes.news),
+    listEvents: () => request(routes.events)
   };
 })();

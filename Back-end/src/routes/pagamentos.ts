@@ -1,12 +1,15 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requirePasswordChangeCompleted } from '../middleware/auth.js';
 import { ApiError } from '../utils/api-error.js';
 import { idSchema, moneySchema } from '../schemas/common.js';
+import { env } from '../config/env.js';
 
 export const pagamentosRouter = Router();
-pagamentosRouter.use(authenticate);
+export const paymentsPixRouter = Router();
+pagamentosRouter.use(authenticate, requirePasswordChangeCompleted);
+paymentsPixRouter.use(authenticate, requirePasswordChangeCompleted);
 
 const paymentSchema = z.object({
   associadoId: idSchema.optional(),
@@ -15,6 +18,13 @@ const paymentSchema = z.object({
   method: z.enum(['pix', 'card', 'dinheiro', 'transferencia']),
   externalReference: z.string().trim().max(160).optional()
 });
+
+const getPix: RequestHandler = (_req, res) => {
+  res.json({ pixKey: env.PIX_KEY, receiverName: env.PIX_RECEIVER_NAME });
+};
+
+pagamentosRouter.get('/pix', getPix);
+paymentsPixRouter.get('/', getPix);
 
 pagamentosRouter.get('/', async (req, res) => {
   const requestedId = req.query.associadoId ? idSchema.parse(req.query.associadoId) : undefined;

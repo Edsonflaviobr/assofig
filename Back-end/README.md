@@ -95,6 +95,8 @@ FRONTEND_URL=http://localhost:5500
 EMAIL_PROVIDER=disabled
 RESEND_API_KEY=configure-em-producao
 EMAIL_FROM=no-reply@seu-dominio.com
+PIX_KEY=
+PIX_RECEIVER_NAME=ASSOFIG
 ```
 
 Nunca envie o arquivo `.env` para um repositório. Ele já está ignorado pelo `.gitignore`.
@@ -290,18 +292,32 @@ A API aplica duas verificações:
 |---|---|---|
 | GET | `/api/health` | Público |
 | POST | `/api/auth/login` | Público |
+| POST | `/api/auth/change-initial-password` | Autenticado durante troca obrigatória |
 | POST | `/api/inscricoes` | Público |
 | POST | `/api/contato` | Público |
 | GET | `/api/noticias` | Público |
 | GET | `/api/eventos` | Público |
 | GET | `/api/associados/me` | Associado |
+| GET | `/api/auth/me` | Autenticado; perfil mínimo permitido antes da troca |
 | GET | `/api/beneficios/historico` | Associado |
 | GET/POST | `/api/pagamentos` | Autenticado |
+| GET | `/api/payments/pix` e `/api/pagamentos/pix` | Autenticado após troca inicial |
 | GET/POST | `/api/diretoria/associados` | Diretoria |
+| GET/POST | `/api/members` | Diretoria |
 | PUT/DELETE | `/api/diretoria/associados/:id` | Diretoria |
+| PUT/DELETE | `/api/members/:id` | Diretoria |
 | GET/POST | `/api/diretoria/associados/:id/inadimplencias` | Diretoria |
 | PATCH | `/api/diretoria/associados/:id/inadimplencias/:inadimplenciaId/regularizar` | Diretoria |
 
+## Área restrita e cadastro oficial
+
+`GET /api/auth/me` usa exclusivamente o `userId` do token e retorna o usuário autenticado com o registro completo de `associados` e suas próprias inadimplências. `GET /api/associados/me` continua disponível e também resolve o cadastro pelo vínculo `users.associado_id`.
+
+As rotas antigas `/api/diretoria/associados` foram preservadas. Os aliases `/api/members` usam os mesmos handlers e exigem perfil `admin`. Ao incluir um associado, a API cria na mesma transação o usuário `member` vinculado, salva somente o hash bcrypt de `SEED_PASSWORD` e marca `must_change_password` como `TRUE`. O login retorna `mustChangePassword`; enquanto for verdadeiro, somente `/api/auth/me` com perfil mínimo e `/api/auth/change-initial-password` ficam acessíveis. Após a troca válida, o indicador passa para `FALSE`.
+
+`POST /api/inscricoes` e `POST /api/contato` permanecem separados do cadastro oficial: gravam apenas em `inscricoes` ou `contatos` e enviam a solicitação para `contato@assofig.com` pelo Resend.
+
+`GET /api/payments/pix` e `GET /api/pagamentos/pix` apenas retornam `PIX_KEY` e `PIX_RECEIVER_NAME`; não criam cobrança, checkout ou integração com gateway.
 ## Recuperação de senha
 
 `POST /api/auth/forgot-password` sempre devolve a mesma resposta, exista ou não uma conta. Tokens aleatórios têm validade de 30 minutos, são armazenados apenas como hash SHA-256 e podem ser usados uma única vez. `POST /api/auth/reset-password` grava a nova senha com bcrypt.
