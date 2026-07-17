@@ -226,10 +226,10 @@ describe('área restrita', () => {
     expect(mocks.poolQuery.mock.calls[1]?.[1]).toEqual([42]);
   });
 
-  it('aceita a referência de inadimplência enviada pelo frontend', async () => {
+  it('gera a referência mensal a partir da data de vencimento', async () => {
     const clientQuery = vi.fn(async (sql: string, params?: unknown[]): Promise<FakeResult> => {
       if (sql.includes('INSERT INTO inadimplencias')) {
-        return { rows: [{ id: 8, associado_id: 42, reference: '07/2026', amount: 75, status: 'open' }], rowCount: 1 };
+        return { rows: [{ id: 8, associado_id: 42, reference: '08/2026', amount: 120, status: 'open' }], rowCount: 1 };
       }
       if (sql.includes('SELECT EXISTS')) return { rows: [{ has_open: true }], rowCount: 1 };
       if (sql.includes('SELECT status FROM associados')) return { rows: [{ status: 'active' }], rowCount: 1 };
@@ -239,15 +239,14 @@ describe('área restrita', () => {
     allowPrivateAccess();
 
     const response = await request(app).post('/api/members/42/inadimplencias').set(auth(adminToken)).send({
-      reference: 'Mensalidade 07/2026',
-      amount: 75,
-      dueDate: '2026-07-10'
+      amount: 120,
+      dueDate: '2026-08-10'
     });
 
     expect(response.status).toBe(201);
-    expect(response.body.reference).toBe('07/2026');
+    expect(response.body.reference).toBe('08/2026');
     const insert = clientQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO inadimplencias'));
-    expect(insert?.[1]).toEqual([42, '2026-07-01', '2026-07-10', 75, null]);
+    expect(insert?.[1]).toEqual([42, '2026-08-01', '2026-08-10', 120, null]);
     expect(String(insert?.[0])).toContain("to_char(reference_month, 'MM/YYYY') AS reference");
   });
 

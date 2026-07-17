@@ -25,37 +25,14 @@ const memberSchema = z.object({
   password: z.string().min(6).max(200).optional()
 });
 
-function parseReferenceMonth(reference: string | undefined): string | undefined {
-  if (!reference) return undefined;
-  const monthYear = reference.match(/(?:^|\D)(0?[1-9]|1[0-2])\/(\d{4})(?:\D|$)/);
-  const month = monthYear?.[1];
-  const year = monthYear?.[2];
-  if (month && year) return `${year}-${month.padStart(2, '0')}-01`;
-  const yearMonth = reference.match(/^(\d{4})-(0[1-9]|1[0-2])(?:-\d{2})?$/);
-  const isoYear = yearMonth?.[1];
-  const isoMonth = yearMonth?.[2];
-  if (isoYear && isoMonth) return `${isoYear}-${isoMonth}-01`;
-  return undefined;
-}
-
 const delinquencySchema = z.object({
-  referenceMonth: dateSchema.optional(),
-  reference: z.string().trim().min(1).max(160).optional(),
   dueDate: dateSchema,
   amount: moneySchema,
   notes: z.string().trim().max(1000).optional()
-}).transform((input, context) => {
-  const referenceMonth = input.referenceMonth ?? parseReferenceMonth(input.reference);
-  if (!referenceMonth) {
-    context.addIssue({
-      code: 'custom',
-      path: ['reference'],
-      message: 'Informe uma referência com mês e ano válidos.'
-    });
-    return z.NEVER;
-  }
-  return { ...input, referenceMonth };
-});
+}).transform((input) => ({
+  ...input,
+  referenceMonth: `${input.dueDate.slice(0, 7)}-01`
+}));
 
 async function syncFinancialStatus(client: { query: Function }, associadoId: number) {
   const open = await client.query("SELECT EXISTS (SELECT 1 FROM inadimplencias WHERE associado_id = $1 AND status = 'open') AS has_open", [associadoId]);

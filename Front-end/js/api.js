@@ -6,7 +6,6 @@
     forgotPassword: '/auth/forgot-password',
     changePassword: '/auth/change-password',
     profile: '/auth/me',
-    profileFallback: '/profile',
     members: '/members',
     applications: '/inscricoes',
     contact: '/contato',
@@ -94,11 +93,7 @@
         method: 'POST',
         body: JSON.stringify(data)
       }),
-    getProfile: () =>
-      fallbackOnNotFound(
-        () => request(routes.profile),
-        () => request(routes.profileFallback)
-      ),
+    getProfile: () => request(routes.profile),
 
     submitApplication: data =>
       request(routes.applications, {

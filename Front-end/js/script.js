@@ -49,24 +49,26 @@
     const root = payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
       ? payload.data
       : payload;
-    const userCandidate = root.user ?? root.profile ?? payload.user ?? payload.profile ?? root;
+    const userCandidate = root.user ?? payload.user ?? root;
     const user = userCandidate && typeof userCandidate === 'object' && !Array.isArray(userCandidate)
       ? userCandidate
       : {};
     const member = root.member ?? payload.member ?? null;
     const associado = root.associado ?? payload.associado ?? null;
+    const profileEntity = root.profile ?? payload.profile ?? null;
     const permissionCandidate = root.permissions ?? payload.permissions ?? user.permissions ?? {};
     const permissions = permissionCandidate && typeof permissionCandidate === 'object' && !Array.isArray(permissionCandidate)
       ? permissionCandidate
       : {};
     const associadoId = user.associadoId ?? user.associationId ?? user.memberId ??
-      member?.id ?? associado?.id ?? null;
+      member?.id ?? associado?.id ?? profileEntity?.id ?? null;
 
     return {
       user,
       permissions,
       member,
       associado,
+      profile: profileEntity,
       associadoId,
       role: user.role ?? user.perfil ?? user.tipo ?? root.role ?? payload.role ?? '',
       mustChangePassword: Boolean(
@@ -95,6 +97,24 @@
     };
   }
 
+  function normalizeMemberProfile(response) {
+    const normalized = normalizeProfileResponse(response);
+    const user = normalized.user;
+    const member = normalized.member ?? normalized.associado ?? normalized.profile ?? {};
+    const merged = {
+      ...user,
+      ...member,
+      name: member.name ?? member.nome ?? user.name ?? user.nome ?? '',
+      email: member.email ?? user.email ?? ''
+    };
+    const profile = normalizeMember(merged);
+    const memberStatus = member.status ?? member.situacao ?? user.status ?? user.situacao;
+
+    profile.associadoId = normalized.associadoId;
+    profile.role = normalized.role || profile.role;
+    profile.status = memberStatus ?? '';
+    return profile;
+  }
   function normalizeDefault(raw) {
     return {
       id: raw.id ?? raw.inadimplenciaId,
@@ -129,7 +149,7 @@
   function buildAccessContext(profileResponse, loginResponse) {
     const profileData = normalizeProfileResponse(profileResponse);
     const loginData = normalizeProfileResponse(loginResponse);
-    const profile = normalizeMember(profileData.user);
+    const profile = normalizeMemberProfile(profileResponse);
     const memberPermission = permissionValue(
       [profileData.permissions, loginData.permissions],
       'canAccessMemberArea'
@@ -219,6 +239,14 @@
     return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
   }
 
+  function formatPhone(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 11);
+    if (!digits) return '';
+    if (digits.length <= 10) {
+      return digits.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d{1,4})$/, '$1-$2');
+    }
+    return digits.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+  }
   function toast(message) {
     const element = $('#toast');
     element.textContent = message;
@@ -361,7 +389,16 @@
     const portal = $('#member-portal');
     portal.hidden = false;
     try {
-      await renderMemberPortal(privateState.profile);
+      const profileResponse = await AssofigAPI.getProfile();
+      const refreshedAccess = buildAccessContext(profileResponse, privateState.loginResponse);
+      if (!refreshedAccess.canAccessMemberArea) {
+        const accessError = new Error('Acesso não autorizado à Área do Associado.');
+        accessError.status = 403;
+        throw accessError;
+      }
+      privateState.access = refreshedAccess;
+      privateState.profile = refreshedAccess.profile;
+      await renderMemberPortal(refreshedAccess.profile);
     } catch (error) {
       if (error.status === 403) {
         portal.hidden = true;
@@ -436,6 +473,7 @@
     return memberFields.map(field => {
       let value = profile[field.name];
       if (field.name === 'document') value = formatDocument(value);
+      if (field.name === 'phone') value = formatPhone(value);
       if (field.name === 'status') value = statusLabel(value);
       return '<div><small>' + escapeHtml(field.label) + '</small><strong>' + escapeHtml(value || 'Não informado') + '</strong></div>';
     }).join('');
@@ -728,24 +766,29 @@
         $('[data-defaults-content]', dialog.modal).innerHTML =
           directorDefaultsHtml(defaults, memberId) +
           '<form id="default-form" class="default-form"><h3>Registrar pendência</h3>' +
-          '<div class="form-row"><label>Referência<input name="reference" required placeholder="Ex.: Mensalidade 07/2026"></label>' +
-          '<label>Valor<input name="amount" type="number" min="0.01" step="0.01" required></label></div>' +
-          '<label>Vencimento<input name="dueDate" type="date" required></label>' +
+          '<div class="form-row"><label>Valor da inadimplência<input name="amount" type="number" min="0.01" step="0.01" required></label>' +
+          '<label>Data de vencimento<input name="dueDate" type="date" required></label></div>' +
           '<button class="btn btn-blue" type="submit">Registrar inadimplência</button></form>';
 
         $('#default-form', dialog.modal).addEventListener('submit', async event => {
           event.preventDefault();
-          const data = Object.fromEntries(new FormData(event.currentTarget));
-          data.amount = Number(data.amount);
-          const button = $('button[type=submit]', event.currentTarget);
+          const form = event.currentTarget;
+          const data = {
+            amount: Number(form.elements.amount.value),
+            dueDate: form.elements.dueDate.value
+          };
+          const button = $('button[type=submit]', form);
           button.disabled = true;
           try {
             await AssofigAPI.createMemberDefault(memberId, data);
-            toast('Inadimplência registrada.');
+            toast('Inadimplência registrada com sucesso.');
             await load();
             await refreshAdmin();
           } catch (error) {
-            toast(error.message);
+            const message = error.status === 400
+              ? error.message
+              : error.message || 'Não foi possível registrar a inadimplência.';
+            toast(message);
             button.disabled = false;
           }
         });
