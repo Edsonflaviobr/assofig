@@ -44,6 +44,38 @@
     return [];
   }
 
+  function normalizeProfileResponse(response) {
+    const payload = response && typeof response === 'object' && !Array.isArray(response) ? response : {};
+    const root = payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
+      ? payload.data
+      : payload;
+    const userCandidate = root.user ?? root.profile ?? payload.user ?? payload.profile ?? root;
+    const user = userCandidate && typeof userCandidate === 'object' && !Array.isArray(userCandidate)
+      ? userCandidate
+      : {};
+    const member = root.member ?? payload.member ?? null;
+    const associado = root.associado ?? payload.associado ?? null;
+    const permissionCandidate = root.permissions ?? payload.permissions ?? user.permissions ?? {};
+    const permissions = permissionCandidate && typeof permissionCandidate === 'object' && !Array.isArray(permissionCandidate)
+      ? permissionCandidate
+      : {};
+    const associadoId = user.associadoId ?? user.associationId ?? user.memberId ??
+      member?.id ?? associado?.id ?? null;
+
+    return {
+      user,
+      permissions,
+      member,
+      associado,
+      associadoId,
+      role: user.role ?? user.perfil ?? user.tipo ?? root.role ?? payload.role ?? '',
+      mustChangePassword: Boolean(
+        user.mustChangePassword ?? user.must_change_password ??
+        root.mustChangePassword ?? root.must_change_password ??
+        payload.mustChangePassword ?? payload.must_change_password
+      )
+    };
+  }
   function normalizeMember(raw) {
     const source = unwrap(raw) || {};
     return {
@@ -91,35 +123,23 @@
   }
 
   function requiresPasswordChange(response) {
-    const raw = unwrap(response) || {};
-    return Boolean(
-      response?.mustChangePassword ?? response?.must_change_password ??
-      response?.data?.mustChangePassword ?? response?.data?.must_change_password ??
-      response?.user?.mustChangePassword ?? response?.user?.must_change_password ??
-      response?.data?.user?.mustChangePassword ?? response?.data?.user?.must_change_password ??
-      raw.mustChangePassword ?? raw.must_change_password
-    );
+    return normalizeProfileResponse(response).mustChangePassword;
   }
 
   function buildAccessContext(profileResponse, loginResponse) {
-    const profileRaw = unwrap(profileResponse) || {};
-    const loginRaw = unwrap(loginResponse) || {};
-    const profile = normalizeMember(profileResponse);
-    const permissionSources = [
-      profileResponse?.permissions,
-      profileResponse?.data?.permissions,
-      profileRaw.permissions,
-      loginResponse?.permissions,
-      loginResponse?.data?.permissions,
-      loginRaw.permissions
-    ];
-    const memberPermission = permissionValue(permissionSources, 'canAccessMemberArea');
-    const adminPermission = permissionValue(permissionSources, 'canAccessAdminArea');
-    const associadoId = profileRaw.associadoId ?? profileRaw.associationId ?? profileRaw.memberId ??
-      profileRaw.associado?.id ?? profileResponse?.associadoId ?? profileResponse?.data?.associadoId ??
-      loginRaw.associadoId ?? loginRaw.associationId ?? loginRaw.memberId ?? loginRaw.associado?.id ?? null;
-    const role = profile.role || profileRaw.role || profileRaw.tipo || loginRaw.role || loginRaw.tipo ||
-      loginResponse?.role || loginResponse?.data?.role;
+    const profileData = normalizeProfileResponse(profileResponse);
+    const loginData = normalizeProfileResponse(loginResponse);
+    const profile = normalizeMember(profileData.user);
+    const memberPermission = permissionValue(
+      [profileData.permissions, loginData.permissions],
+      'canAccessMemberArea'
+    );
+    const adminPermission = permissionValue(
+      [profileData.permissions, loginData.permissions],
+      'canAccessAdminArea'
+    );
+    const associadoId = profileData.associadoId ?? loginData.associadoId ?? null;
+    const role = profileData.role || loginData.role || profile.role;
 
     profile.associadoId = associadoId;
     return {
@@ -324,7 +344,7 @@
       '<button class="access-logout" type="button">← Sair da área privativa</button></div>';
     portal.hidden = false;
     document.body.classList.add('modal-open');
-    $('[data-access-area]', portal).forEach(button => button.addEventListener('click', () => {
+    $$('[data-access-area]', portal).forEach(button => button.addEventListener('click', () => {
       if (button.dataset.accessArea === 'admin') enterAdminArea();
       else enterMemberArea();
     }));
