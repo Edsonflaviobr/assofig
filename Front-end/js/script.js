@@ -131,7 +131,7 @@
   function normalizePix(response) {
     const data = unwrap(response) || {};
     return {
-      key: data.key ?? data.pixKey ?? data.chave ?? data.chavePix ?? '',
+      key: 'xxxxxxxxx',
       beneficiary: data.beneficiary ?? data.favoredName ?? data.favorecido ?? data.nomeFavorecido ?? ''
     };
   }
@@ -894,7 +894,7 @@
     const defaults = defaultsLoaded
       ? toArray(results[0].value, ['defaults', 'inadimplencias']).map(normalizeDefault)
       : [];
-    const pix = results[1].status === 'fulfilled' ? normalizePix(results[1].value) : { key: '', beneficiary: '' };
+    const pix = results[1].status === 'fulfilled' ? normalizePix(results[1].value) : { key: 'xxxxxxxxx', beneficiary: '' };
     const partnersLoaded = results[2].status === 'fulfilled';
     const partners = partnersLoaded
       ? toArray(results[2].value, ['partners', 'parceiros', 'items']).map(normalizePartner)
