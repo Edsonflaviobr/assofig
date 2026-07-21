@@ -5,6 +5,7 @@ import { transaction } from '../db/transaction.js';
 import { authenticate, requireAdmin, requirePasswordChangeCompleted } from '../middleware/auth.js';
 import { dateSchema, emailSchema, idSchema } from '../schemas/common.js';
 import { sendEventRegistrationRequestEmail, sendPartnerQuestionEmail } from '../services/email.js';
+import { listUpcomingMemberEvents } from '../services/events.js';
 import { ApiError } from '../utils/api-error.js';
 import { documentSchema, readDocumentInput } from '../utils/document.js';
 
@@ -219,17 +220,7 @@ adminCatalogRouter.delete('/events/:id', async (req, res) => {
 });
 
 memberCatalogRouter.get('/events/upcoming', async (req, res) => {
-  const result = await pool.query(
-    `SELECT e.id,e.name,e.event_date AS "eventDate",e.description,e.producer,e.city,
-            e.registration_status AS "registrationStatus",(r.id IS NOT NULL) AS "registrationRequested"
-     FROM events e
-     LEFT JOIN event_registration_requests r ON r.event_id=e.id AND r.associado_id=$1
-     WHERE e.deleted_at IS NULL
-       AND e.event_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
-     ORDER BY e.event_date,e.name`,
-    [req.auth!.associadoId]
-  );
-  res.json(result.rows);
+  res.json(await listUpcomingMemberEvents(req.auth!.associadoId!));
 });
 
 memberCatalogRouter.post('/events/:eventId/registration-request', async (req, res) => {

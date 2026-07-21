@@ -4,6 +4,7 @@ import { pool } from '../db/pool.js';
 import { emailSchema } from '../schemas/common.js';
 import { documentSchema, readDocumentInput } from '../utils/document.js';
 import { sendApplicationEmail, sendContactEmail } from '../services/email.js';
+import { listPublicUpcomingEvents } from '../services/events.js';
 
 export const publicRouter = Router();
 
@@ -52,3 +53,4 @@ publicRouter.post('/contato', async (req, res) => {
 
 publicRouter.get('/noticias', (_req, res) => res.json([]));
 publicRouter.get('/eventos', (_req, res) => res.json([]));
+publicRouter.get('/public/events', async (_req, res) => res.json(await listPublicUpcomingEvents()));

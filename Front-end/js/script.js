@@ -221,6 +221,82 @@
     return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('pt-BR');
   }
 
+  function normalizePublicEvent(raw) {
+    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    return {
+      id: source.id ?? '',
+      name: source.name ?? '',
+      eventDate: source.eventDate ?? '',
+      description: source.description ?? ''
+    };
+  }
+
+  function publicEventsHtml(events) {
+    if (!events.length) {
+      return '<p class="public-events-empty">Em breve, novas capacitações, encontros e ações regionais.</p>';
+    }
+
+    return '<div class="public-events-list">' + events.map((item, index) => {
+      const buttonId = 'public-event-button-' + index;
+      const detailsId = 'public-event-details-' + index;
+      const eventName = item.name || 'Evento';
+      return '<article class="public-event-item"><button class="public-event-toggle" id="' + buttonId +
+        '" type="button" aria-expanded="false" aria-controls="' + detailsId +
+        '" aria-label="Ver detalhes do evento ' + escapeHtml(eventName) + '"><span class="public-event-summary"><strong class="public-event-name">' +
+        escapeHtml(eventName) + '</strong><time datetime="' + escapeHtml(String(item.eventDate || '').slice(0, 10)) + '">' +
+        escapeHtml(dateBr(item.eventDate)) + '</time></span><span class="public-event-plus" aria-hidden="true">+</span></button>' +
+        '<div class="public-event-details" id="' + detailsId + '" role="region" aria-labelledby="' + buttonId +
+        '" aria-hidden="true"><div class="public-event-details-inner"><p class="public-event-description">' +
+        escapeHtml(item.description || 'Descrição não informada.') + '</p><p class="public-event-contact">Dúvidas? Entre em contato com a ASSOFIG.</p>' +
+        '</div></div></article>';
+    }).join('') + '</div>';
+  }
+
+  function bindPublicEventsAccordion(container) {
+    const items = $$('.public-event-item', container);
+    const closeItem = item => {
+      const button = $('.public-event-toggle', item);
+      const details = $('.public-event-details', item);
+      const name = $('.public-event-name', item)?.textContent || 'evento';
+      item.classList.remove('open');
+      button.setAttribute('aria-expanded', 'false');
+      button.setAttribute('aria-label', 'Ver detalhes do evento ' + name);
+      details.setAttribute('aria-hidden', 'true');
+    };
+
+    items.forEach(item => $('.public-event-toggle', item).addEventListener('click', () => {
+      const shouldOpen = !item.classList.contains('open');
+      items.forEach(closeItem);
+      if (!shouldOpen) return;
+      const button = $('.public-event-toggle', item);
+      const details = $('.public-event-details', item);
+      const name = $('.public-event-name', item)?.textContent || 'evento';
+      item.classList.add('open');
+      button.setAttribute('aria-expanded', 'true');
+      button.setAttribute('aria-label', 'Fechar detalhes do evento ' + name);
+      details.setAttribute('aria-hidden', 'false');
+    }));
+  }
+
+  async function loadPublicEvents() {
+    const container = $('#public-events');
+    if (!container) return;
+    container.setAttribute('aria-busy', 'true');
+    container.innerHTML = '<div class="public-events-status"><span class="public-events-spinner" aria-hidden="true"></span><p>Carregando próximos eventos...</p></div>';
+    try {
+      const response = await AssofigAPI.listPublicEvents();
+      const events = toArray(response, ['events', 'eventos', 'items']).map(normalizePublicEvent);
+      container.innerHTML = publicEventsHtml(events);
+      if (events.length) bindPublicEventsAccordion(container);
+    } catch (error) {
+      container.innerHTML = '<div class="public-events-status is-error" role="alert"><p>' +
+        escapeHtml(friendlyError(error, 'Não foi possível carregar os próximos eventos.')) +
+        '</p><button type="button" data-retry-public-events>Tentar novamente</button></div>';
+      $('[data-retry-public-events]', container)?.addEventListener('click', loadPublicEvents);
+    } finally {
+      container.setAttribute('aria-busy', 'false');
+    }
+  }
   function statusLabel(status) {
     const value = roleValue(status);
     if (['active', 'ativo', 'paid', 'regular'].includes(value)) return 'Em dia';
@@ -1537,6 +1613,8 @@
     else window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   updateBackToTop();
+
+  loadPublicEvents();
 
   $('#year').textContent = new Date().getFullYear();
   const observer = new IntersectionObserver(entries =>

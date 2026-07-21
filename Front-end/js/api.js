@@ -15,6 +15,7 @@
     memberPartners: '/member/partners',
     adminEvents: '/admin/events',
     memberEvents: '/member/events',
+    publicEvents: '/public/events',
     news: '/noticias',
     events: '/eventos'
   };
@@ -194,6 +195,7 @@
       routes.memberEvents + '/' + encodeURIComponent(id) + '/registration-request',
       { method: 'POST' }
     ),
+    listPublicEvents: () => request(routes.publicEvents),
     getPixInfo: () => request(routes.pix),
     listNews: () => request(routes.news),
     listEvents: () => request(routes.events)
