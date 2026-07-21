@@ -103,7 +103,8 @@ const updateAssociado: RequestHandler = async (req, res) => {
       await client.query(
         `INSERT INTO inadimplencias (associado_id, reference_month, due_date, amount, notes)
          VALUES ($1, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, 50, 'Inadimplência registrada pela diretoria')
-         ON CONFLICT (associado_id, reference_month) DO UPDATE SET status='open', resolved_at=NULL, updated_at=NOW()`, [id]);
+         ON CONFLICT (associado_id, reference_month) WHERE status IN ('open', 'proof_sent')
+         DO UPDATE SET status='open', resolved_at=NULL, proof_sent_at=NULL, proof_email_id=NULL, updated_at=NOW()`, [id]);
     } else if (input.status === 'active') {
       await client.query("UPDATE inadimplencias SET status='resolved', resolved_at=NOW(), updated_at=NOW() WHERE associado_id=$1 AND status IN ('open','proof_sent')", [id]);
     }
