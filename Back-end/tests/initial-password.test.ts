@@ -147,6 +147,17 @@ describe('troca obrigatória da senha inicial', () => {
     expect(mustChangePassword).toBe(false);
   });
 
+  it('aceita o endpoint e o payload usados pelo frontend', async () => {
+    const response = await request(app).post('/api/auth/change-password').set(authorization).send({
+      password: 'NovaSenhaFrontend#2026',
+      passwordConfirmation: 'NovaSenhaFrontend#2026'
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.mustChangePassword).toBe(false);
+    expect(await bcrypt.compare('NovaSenhaFrontend#2026', passwordHash)).toBe(true);
+    expect(mustChangePassword).toBe(false);
+  });
   it('login posterior informa troca concluída e libera acesso privado', async () => {
     await request(app).post('/api/auth/change-initial-password').set(authorization).send({
       currentPassword: env.SEED_PASSWORD,

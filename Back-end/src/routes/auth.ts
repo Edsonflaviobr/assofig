@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
@@ -16,15 +16,26 @@ const loginSchema = z.object({
   role: z.enum(['member', 'admin'])
 });
 
-const changeInitialPasswordSchema = z.object({
-  currentPassword: z.string().min(6).max(200),
-  newPassword: z.string().min(6).max(200),
-  confirmPassword: z.string().min(6).max(200)
-}).refine((input) => input.newPassword === input.confirmPassword, {
-  message: 'As senhas não conferem.',
-  path: ['confirmPassword']
-});
-
+const changeInitialPasswordSchema = z.union([
+  z.object({
+    currentPassword: z.string().min(6).max(200),
+    newPassword: z.string().min(6).max(200),
+    confirmPassword: z.string().min(6).max(200)
+  }).refine((input) => input.newPassword === input.confirmPassword, {
+    message: 'As senhas não conferem.',
+    path: ['confirmPassword']
+  }),
+  z.object({
+    password: z.string().min(6).max(200),
+    passwordConfirmation: z.string().min(6).max(200)
+  }).refine((input) => input.password === input.passwordConfirmation, {
+    message: 'As senhas não conferem.',
+    path: ['passwordConfirmation']
+  }).transform((input) => ({
+    newPassword: input.password,
+    confirmPassword: input.passwordConfirmation
+  }))
+]);
 const forgotPasswordSchema = z.object({ email: emailSchema });
 const resetPasswordSchema = z.object({
   token: z.string().trim().regex(/^[A-Za-z0-9_-]{43}$/),
@@ -100,7 +111,7 @@ authRouter.get('/me', authenticate, async (req, res) => {
   res.json({ ...profile, permissions, member: profile.associado });
 });
 
-authRouter.post('/change-initial-password', authenticate, async (req, res) => {
+const changeInitialPassword: RequestHandler = async (req, res) => {
   const input = changeInitialPasswordSchema.parse(req.body);
   const result = await pool.query(
     'SELECT password_hash, must_change_password FROM users WHERE id = $1 AND active = TRUE',
@@ -109,10 +120,10 @@ authRouter.post('/change-initial-password', authenticate, async (req, res) => {
   const user = result.rows[0];
   if (!user) throw new ApiError(404, 'Usuário não encontrado.');
   if (!user.must_change_password) throw new ApiError(400, 'A troca da senha inicial não é necessária.');
-  if (!(await bcrypt.compare(input.currentPassword, user.password_hash))) {
+  if ('currentPassword' in input && !(await bcrypt.compare(input.currentPassword, user.password_hash))) {
     throw new ApiError(401, 'Senha atual incorreta.');
   }
-  if (input.newPassword === input.currentPassword || input.newPassword === process.env.SEED_PASSWORD) {
+  if ((await bcrypt.compare(input.newPassword, user.password_hash)) || input.newPassword === process.env.SEED_PASSWORD) {
     throw new ApiError(400, 'A nova senha deve ser diferente da senha inicial.');
   }
   const passwordHash = await bcrypt.hash(input.newPassword, 12);
@@ -123,8 +134,10 @@ authRouter.post('/change-initial-password', authenticate, async (req, res) => {
   );
   if (!updated.rowCount) throw new ApiError(409, 'Não foi possível concluir a troca da senha inicial.');
   res.json({ message: 'Senha inicial alterada com sucesso.', mustChangePassword: false });
-});
+};
 
+authRouter.post('/change-initial-password', authenticate, changeInitialPassword);
+authRouter.post('/change-password', authenticate, changeInitialPassword);
 authRouter.post('/forgot-password', async (req, res) => {
   const input = forgotPasswordSchema.parse(req.body);
   await requestPasswordReset(input.email);

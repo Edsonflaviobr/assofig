@@ -4,7 +4,7 @@
   const routes = {
     login: '/auth/login',
     forgotPassword: '/auth/forgot-password',
-    changePassword: '/auth/change-password',
+    changePassword: '/auth/change-initial-password',
     profile: '/auth/me',
     members: '/members',
     applications: '/inscricoes',

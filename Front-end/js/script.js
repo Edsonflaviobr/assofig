@@ -1159,16 +1159,26 @@
     }
   });
 
+  $$('#mandatory-password-form input').forEach(input => input.addEventListener('input', () => {
+    input.setCustomValidity('');
+  }));
   $('#mandatory-password-form').addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;
-    const password = form.elements.password;
-    const confirmation = form.elements.passwordConfirmation;
+    const currentPassword = form.elements.currentPassword;
+    const newPassword = form.elements.newPassword;
+    const confirmPassword = form.elements.confirmPassword;
     const button = $('button[type=submit]', form);
-    confirmation.setCustomValidity('');
-    if (password.value !== confirmation.value) {
-      confirmation.setCustomValidity('As senhas precisam ser iguais.');
-      confirmation.reportValidity();
+    newPassword.setCustomValidity('');
+    confirmPassword.setCustomValidity('');
+    if (currentPassword.value === newPassword.value) {
+      newPassword.setCustomValidity('A nova senha deve ser diferente da senha atual ou inicial.');
+      newPassword.reportValidity();
+      return;
+    }
+    if (newPassword.value !== confirmPassword.value) {
+      confirmPassword.setCustomValidity('A confirmação deve ser igual à nova senha.');
+      confirmPassword.reportValidity();
       return;
     }
 
@@ -1176,8 +1186,9 @@
     button.textContent = 'Salvando...';
     try {
       const result = await AssofigAPI.changePassword({
-        password: password.value,
-        passwordConfirmation: confirmation.value
+        currentPassword: currentPassword.value,
+        newPassword: newPassword.value,
+        confirmPassword: confirmPassword.value
       });
       const renewedToken = result?.token || result?.accessToken || result?.data?.token || result?.data?.accessToken;
       if (renewedToken) localStorage.setItem('assofig_token', renewedToken);
