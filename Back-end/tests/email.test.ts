@@ -15,7 +15,14 @@ vi.mock('resend', () => ({
   }
 }));
 
-import { sendApplicationEmail, sendContactEmail, sendPasswordResetEmail, sendPaymentProofEmail } from '../src/services/email.js';
+import {
+  sendApplicationEmail,
+  sendContactEmail,
+  sendEventRegistrationRequestEmail,
+  sendPartnerQuestionEmail,
+  sendPasswordResetEmail,
+  sendPaymentProofEmail
+} from '../src/services/email.js';
 
 describe('envio de e-mails', () => {
   beforeEach(() => mocks.send.mockReset());
@@ -104,5 +111,34 @@ describe('envio de e-mails', () => {
     expect(body.text).toContain('10/08/2026');
     expect(body.text).toContain('não realiza a baixa automática');
     expect(body.attachments).toEqual([{ filename: 'comprovante.pdf', contentType: 'application/pdf', content: proof }]);
+  });
+  it('envia dúvida sobre parceiro para contato com Reply-To do associado', async () => {
+    mocks.send.mockResolvedValue({ data: { id: 'question-id' }, error: null });
+    await sendPartnerQuestionEmail({
+      memberName: 'Associada Teste', memberEmail: 'associada@email.com', memberPhone: '35999990000',
+      partnerName: 'Clínica Parceira', activity: 'Fisioterapia', city: 'Guaxupé',
+      message: 'Como utilizar o benefício?', sentAt: new Date('2026-07-20T15:00:00-03:00')
+    });
+
+    const body = mocks.send.mock.calls[0]?.[0] as { to: string[]; replyTo: string; subject: string; text: string };
+    expect(body.to).toEqual(['contato@assofig.com']);
+    expect(body.replyTo).toBe('associada@email.com');
+    expect(body.subject).toBe('Dúvida sobre parceiro ou benefício - Clínica Parceira');
+    expect(body.text).toContain('Como utilizar o benefício?');
+  });
+
+  it('envia solicitação de evento para contato com Reply-To do associado', async () => {
+    mocks.send.mockResolvedValue({ data: { id: 'registration-id' }, error: null });
+    await sendEventRegistrationRequestEmail({
+      memberName: 'Associada Teste', memberEmail: 'associada@email.com', memberPhone: null,
+      eventName: 'Congresso ASSOFIG', eventDate: '2027-08-10', producer: 'ASSOFIG', city: 'Guaxupé',
+      requestedAt: new Date('2026-07-20T15:00:00-03:00')
+    });
+
+    const body = mocks.send.mock.calls[0]?.[0] as { to: string[]; replyTo: string; subject: string; text: string };
+    expect(body.to).toEqual(['contato@assofig.com']);
+    expect(body.replyTo).toBe('associada@email.com');
+    expect(body.subject).toBe('Solicitação de inscrição em evento - Congresso ASSOFIG');
+    expect(body.text).toContain('10/08/2027');
   });
 });

@@ -7,6 +7,7 @@ import { authenticate, requireMemberLink, requirePasswordChangeCompleted } from 
 import { sendPaymentProofEmail } from '../services/email.js';
 import { ApiError } from '../utils/api-error.js';
 import { idSchema } from '../schemas/common.js';
+import { memberCatalogRouter } from './catalog.js';
 
 export const memberRouter = Router();
 
@@ -53,6 +54,7 @@ async function requireOwnDelinquency(req: Request, _res: Response, next: NextFun
 }
 
 memberRouter.use(authenticate, requirePasswordChangeCompleted, requireMemberLink);
+memberRouter.use(memberCatalogRouter);
 
 memberRouter.get('/inadimplencias', async (req, res) => {
   const result = await pool.query(

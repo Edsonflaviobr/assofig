@@ -20,7 +20,7 @@
     { name: 'status', label: 'Situação', type: 'status', required: true }
   ];
 
-  let privateState = { profile: null, access: null, members: [], loginResponse: null };
+  let privateState = { profile: null, access: null, members: [], adminPartners: [], adminEvents: [], loginResponse: null };
 
   function escapeHtml(value) {
     const div = document.createElement('div');
@@ -136,6 +136,45 @@
     };
   }
 
+  function normalizePartner(raw) {
+    const source = unwrap(raw) || {};
+    return {
+      id: source.id ?? source.partnerId,
+      name: source.name ?? source.nome ?? '',
+      email: source.email ?? '',
+      document: source.document ?? source.documento ?? source.cpfCnpj ?? '',
+      phone: source.phone ?? source.telefone ?? '',
+      activity: source.activity ?? source.atividade ?? '',
+      city: source.city ?? source.cidade ?? '',
+      status: source.status ?? source.situacao ?? 'active'
+    };
+  }
+
+  function normalizeEvent(raw) {
+    const source = unwrap(raw) || {};
+    return {
+      id: source.id ?? source.eventId,
+      name: source.name ?? source.nome ?? '',
+      eventDate: source.eventDate ?? source.event_date ?? source.date ?? source.data ?? '',
+      description: source.description ?? source.descricao ?? '',
+      producer: source.producer ?? source.produtor ?? '',
+      city: source.city ?? source.cidade ?? '',
+      registrationStatus: source.registrationStatus ?? source.registration_status ?? source.status ?? '',
+      registrationRequested: Boolean(
+        source.registrationRequested ?? source.registration_requested ?? source.requested ?? false
+      )
+    };
+  }
+
+  function registrationStatusLabel(status) {
+    return roleValue(status) === 'registration_open' ? 'Inscrições abertas' : 'Aguardando abertura das inscrições';
+  }
+
+  function eventIsPast(item) {
+    if (!item.eventDate) return false;
+    const eventDate = new Date(String(item.eventDate).slice(0, 10) + 'T23:59:59');
+    return !Number.isNaN(eventDate.getTime()) && eventDate < new Date();
+  }
   const roleValue = value => String(value || '').trim().toLowerCase();
   const isDirectorRole = value => ['admin', 'director', 'diretor', 'diretora', 'diretoria', 'board', 'administrator', 'administrador', 'administradora'].includes(roleValue(value));
   function permissionValue(sources, key) {
@@ -331,11 +370,19 @@
   function dynamicModal(content, className) {
     const modal = document.createElement('div');
     modal.className = 'modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
     modal.innerHTML = '<div class="modal-backdrop"></div><div class="modal-panel ' + escapeHtml(className || '') + '"><button class="modal-close" type="button" aria-label="Fechar">×</button>' + content + '</div>';
     document.body.appendChild(modal);
-    const close = () => modal.remove();
+    const onKeyDown = event => { if (event.key === 'Escape') close(); };
+    const close = () => {
+      document.removeEventListener('keydown', onKeyDown);
+      modal.remove();
+    };
     $('.modal-close', modal).addEventListener('click', close);
     $('.modal-backdrop', modal).addEventListener('click', close);
+    document.addEventListener('keydown', onKeyDown);
+    setTimeout(() => $('.modal-close', modal)?.focus(), 10);
     return { modal, close };
   }
 
@@ -431,8 +478,8 @@
     const name = profile?.name || (director ? 'Diretoria' : 'Associado');
     const initials = name.split(/\s+/).slice(0, 2).map(part => part[0] || '').join('').toUpperCase();
     const nav = director
-      ? '<button class="active" data-portal-target="admin-overview">▦ Visão geral</button><button data-portal-target="member-management">♙ Associados</button>'
-      : '<button class="active" data-portal-target="member-overview">▦ Visão geral</button><button data-portal-target="my-data">♙ Meus dados</button><button data-portal-target="my-defaults">! Pendências</button>';
+      ? '<button class="active" data-portal-target="admin-overview">▦ Visão geral</button><button data-portal-target="member-management">♙ Associados</button><button data-portal-target="partner-management">◇ Parceiros ou Benefícios</button><button data-portal-target="event-management">◫ Eventos</button>'
+      : '<button class="active" data-portal-target="member-overview">▦ Visão geral</button><button data-portal-target="my-data">♙ Meus dados</button><button data-portal-target="my-defaults">! Pendências</button><button data-portal-target="member-partners">◇ Parceiros ou Benefícios</button><button data-portal-target="member-events">◫ Próximos eventos</button>';
     const switchAction = privateState.access?.canAccessMemberArea && privateState.access?.canAccessAdminArea
       ? '<button class="portal-switch" type="button" data-switch-area>⇄ Trocar de área</button>'
       : '';
@@ -458,14 +505,14 @@
 
   function logout() {
     localStorage.removeItem('assofig_token');
-    privateState = { profile: null, access: null, members: [], loginResponse: null };
+    privateState = { profile: null, access: null, members: [], adminPartners: [], adminEvents: [], loginResponse: null };
     hidePrivateAreas();
     document.body.classList.remove('modal-open');
     toast('Sessão encerrada.');
   }
 
   function showSessionExpired() {
-    privateState = { profile: null, access: null, members: [], loginResponse: null };
+    privateState = { profile: null, access: null, members: [], adminPartners: [], adminEvents: [], loginResponse: null };
     hidePrivateAreas();
     document.body.classList.remove('modal-open');
     openModal('login-modal');
@@ -706,12 +753,140 @@
       '</strong></div><button class="btn btn-blue" type="button" data-copy-pix>Copiar chave PIX</button></div>';
   }
 
+  function memberPartnersHtml(partners) {
+    if (!partners.length) {
+      return '<div class="empty-state"><strong>Nenhum parceiro ou benefício disponível no momento.</strong></div>';
+    }
+    return '<div class="catalog-card-grid">' + partners.map(partner =>
+      '<article class="catalog-card"><div class="catalog-card-heading"><span class="catalog-icon">◇</span><div><h3>' +
+      escapeHtml(partner.name || 'Parceiro') + '</h3><p>' + escapeHtml(partner.activity || 'Atividade não informada') +
+      '</p></div></div><dl><div><dt>Cidade</dt><dd>' + escapeHtml(partner.city || 'Não informada') +
+      '</dd></div><div><dt>Telefone</dt><dd>' + escapeHtml(formatPhone(partner.phone) || 'Não informado') +
+      '</dd></div><div><dt>E-mail</dt><dd>' + escapeHtml(partner.email || 'Não informado') +
+      '</dd></div>' + (partner.document ? '<div><dt>CPF ou CNPJ</dt><dd>' + escapeHtml(formatDocument(partner.document)) +
+      '</dd></div>' : '') + '</dl><button class="btn btn-blue" type="button" data-partner-question="' +
+      escapeHtml(partner.id) + '">Tenho uma dúvida</button></article>'
+    ).join('') + '</div>';
+  }
+
+  function memberEventsHtml(events) {
+    if (!events.length) {
+      return '<div class="empty-state"><strong>Não há próximos eventos disponíveis no momento.</strong></div>';
+    }
+    return '<div class="catalog-card-grid">' + events.map(item => {
+      let action;
+      if (item.registrationRequested) {
+        action = '<button class="btn btn-secondary" type="button" disabled>Solicitação feita</button>';
+      } else if (roleValue(item.registrationStatus) === 'registration_open') {
+        action = '<button class="btn btn-blue" type="button" data-register-event="' + escapeHtml(item.id) +
+          '">Solicitar inscrição</button>';
+      } else {
+        action = '<span class="registration-waiting">Inscrições ainda não liberadas</span>';
+      }
+      return '<article class="catalog-card event-card"><div class="catalog-card-heading"><span class="catalog-icon">◫</span><div><h3>' +
+        escapeHtml(item.name || 'Evento') + '</h3><p>' + escapeHtml(dateBr(item.eventDate)) + '</p></div></div><p class="catalog-description">' +
+        escapeHtml(item.description || 'Descrição não informada') + '</p><dl><div><dt>Produtor</dt><dd>' +
+        escapeHtml(item.producer || 'Não informado') + '</dd></div><div><dt>Cidade</dt><dd>' +
+        escapeHtml(item.city || 'Não informada') + '</dd></div><div><dt>Inscrições</dt><dd>' +
+        escapeHtml(registrationStatusLabel(item.registrationStatus)) + '</dd></div></dl><div class="catalog-card-action">' + action + '</div></article>';
+    }).join('') + '</div>';
+  }
+
+  function openPartnerQuestion(partner) {
+    const dialog = dynamicModal(
+      '<span class="eyebrow">Parceiros ou Benefícios</span><h2>Tenho uma dúvida</h2><p>Mensagem sobre <strong>' +
+      escapeHtml(partner.name) + '</strong> — ' + escapeHtml(partner.activity || 'benefício') + '.</p>' +
+      '<form class="catalog-message-form"><label for="partner-question-message">Sua dúvida</label>' +
+      '<textarea id="partner-question-message" name="message" rows="5" maxlength="5000" required></textarea>' +
+      '<p class="catalog-form-error" role="alert" hidden></p><div class="catalog-form-actions">' +
+      '<button class="btn btn-secondary" type="button" data-cancel-question>Cancelar</button>' +
+      '<button class="btn btn-blue" type="submit">Enviar mensagem</button></div></form>',
+      'catalog-editor-panel'
+    );
+    $('[data-cancel-question]', dialog.modal).addEventListener('click', dialog.close);
+    $('.catalog-message-form', dialog.modal).addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const message = form.elements.message.value.trim();
+      const errorBox = $('.catalog-form-error', form);
+      const button = $('button[type=submit]', form);
+      if (!message) {
+        errorBox.textContent = 'Escreva sua dúvida.';
+        errorBox.hidden = false;
+        return;
+      }
+      if (button.disabled) return;
+      button.disabled = true;
+      button.textContent = 'Enviando...';
+      errorBox.hidden = true;
+      try {
+        await AssofigAPI.sendPartnerQuestion(partner.id, message);
+        dialog.close();
+        toast('Mensagem enviada. Aguarde as instruções da Diretoria por e-mail.');
+      } catch (error) {
+        errorBox.textContent = friendlyError(error, 'Não foi possível enviar sua mensagem. Tente novamente.');
+        errorBox.hidden = false;
+        button.disabled = false;
+        button.textContent = 'Enviar mensagem';
+      }
+    });
+  }
+
+  function bindMemberPartners(portal, partners) {
+    $$('[data-partner-question]', portal).forEach(button => button.addEventListener('click', () => {
+      const partner = partners.find(item => String(item.id) === String(button.dataset.partnerQuestion));
+      if (partner) openPartnerQuestion(partner);
+    }));
+  }
+
+  async function reloadMemberEvents(portal) {
+    const container = $('[data-member-events-content]', portal);
+    if (!container) return;
+    container.innerHTML = loadingContent('Atualizando próximos eventos');
+    try {
+      const response = await AssofigAPI.listUpcomingEvents();
+      const events = toArray(response, ['events', 'eventos', 'items']).map(normalizeEvent);
+      container.innerHTML = memberEventsHtml(events);
+      bindMemberEvents(portal, events);
+    } catch (error) {
+      container.innerHTML = '<div class="error-state compact" role="alert"><strong>' +
+        escapeHtml(friendlyError(error, 'Não foi possível carregar os próximos eventos.')) + '</strong></div>';
+    }
+  }
+
+  function bindMemberEvents(portal, events) {
+    $$('[data-register-event]', portal).forEach(button => button.addEventListener('click', async () => {
+      const item = events.find(event => String(event.id) === String(button.dataset.registerEvent));
+      if (!item || button.disabled) return;
+      if (!window.confirm('Deseja solicitar inscrição em ' + item.name + '?')) return;
+      button.disabled = true;
+      button.textContent = 'Solicitando...';
+      try {
+        await AssofigAPI.requestEventRegistration(item.id);
+        toast('Solicitação realizada. Aguarde a confirmação da Diretoria pelo seu e-mail.');
+        await reloadMemberEvents(portal);
+      } catch (error) {
+        if (error.status === 409 && /já foi solicitada/i.test(error.message || '')) {
+          button.textContent = 'Solicitação feita';
+          button.disabled = true;
+          toast('A inscrição para este evento já foi solicitada.');
+          return;
+        }
+        toast(friendlyError(error, 'Não foi possível solicitar a inscrição. Tente novamente.'));
+        button.disabled = false;
+        button.textContent = 'Solicitar inscrição';
+      }
+    }));
+  }
   async function renderMemberPortal(profile) {
     const portal = $('#member-portal');
     portal.innerHTML = portalLayout('member', profile, loadingContent('Carregando seu perfil'));
     bindPortalCommon(portal);
 
-    const results = await Promise.allSettled([AssofigAPI.getMyDefaults(), AssofigAPI.getPixInfo()]);
+    const results = await Promise.allSettled([
+      AssofigAPI.getMyDefaults(), AssofigAPI.getPixInfo(),
+      AssofigAPI.listMemberPartners(), AssofigAPI.listUpcomingEvents()
+    ]);
     const forbidden = results.find(result => result.status === 'rejected' && result.reason?.status === 403);
     if (forbidden) throw forbidden.reason;
     const defaultsLoaded = results[0].status === 'fulfilled';
@@ -720,6 +895,14 @@
       ? toArray(results[0].value, ['defaults', 'inadimplencias']).map(normalizeDefault)
       : [];
     const pix = results[1].status === 'fulfilled' ? normalizePix(results[1].value) : { key: '', beneficiary: '' };
+    const partnersLoaded = results[2].status === 'fulfilled';
+    const partners = partnersLoaded
+      ? toArray(results[2].value, ['partners', 'parceiros', 'items']).map(normalizePartner)
+      : [];
+    const eventsLoaded = results[3].status === 'fulfilled';
+    const events = eventsLoaded
+      ? toArray(results[3].value, ['events', 'eventos', 'items']).map(normalizeEvent)
+      : [];
     const late = defaults.some(defaultIsOpen);
 
     const content = '<header class="portal-top" id="member-overview"><div><h1>Olá, ' +
@@ -730,7 +913,14 @@
       profileDataHtml(profile) + '</div></section><section class="panel" id="monthly-payment"><h2>Pagamento da mensalidade</h2>' +
       pixHtml(pix) + '</section></div><section class="panel" id="my-defaults"><h2>Inadimplências</h2>' +
       (defaultsLoaded ? defaultsHtml(defaults) : '<div class="error-state compact" role="alert"><strong>' +
-        escapeHtml(friendlyError(defaultsError, 'Não foi possível carregar suas inadimplências. Tente novamente.')) + '</strong></div>') + '</section><section class="panel portal-shortcuts"><h2>Documentos e contato</h2>' +
+        escapeHtml(friendlyError(defaultsError, 'Não foi possível carregar suas inadimplências. Tente novamente.')) + '</strong></div>') + '</section>' +
+      '<section class="panel catalog-section" id="member-partners"><div class="catalog-section-heading"><div><h2>Parceiros ou Benefícios</h2><p>Conheça os parceiros ativos disponíveis para associados.</p></div></div><div data-member-partners-content>' +
+      (partnersLoaded ? memberPartnersHtml(partners) : '<div class="error-state compact" role="alert"><strong>' +
+        escapeHtml(friendlyError(results[2].reason, 'Não foi possível carregar os parceiros ou benefícios.')) + '</strong></div>') + '</div></section>' +
+      '<section class="panel catalog-section" id="member-events"><div class="catalog-section-heading"><div><h2>Próximos eventos</h2><p>Eventos atuais e futuros disponibilizados pela ASSOFIG.</p></div></div><div data-member-events-content>' +
+      (eventsLoaded ? memberEventsHtml(events) : '<div class="error-state compact" role="alert"><strong>' +
+        escapeHtml(friendlyError(results[3].reason, 'Não foi possível carregar os próximos eventos.')) + '</strong></div>') + '</div></section>' +
+      '<section class="panel portal-shortcuts"><h2>Documentos e contato</h2>' +
       '<div class="history-list"><a class="history-item" href="docs/Estatuto ASSOFIG_registrado.pdf" download><span>↓</span>' +
       '<div><strong>Estatuto ASSOFIG</strong><small>Baixar PDF</small></div></a>' +
       '<a class="history-item" href="mailto:contato@assofig.com"><span>✉</span><div><strong>Falar com a associação</strong>' +
@@ -739,6 +929,8 @@
     $('.portal-main', portal).innerHTML = content;
     bindPortalCommon(portal);
     if (defaultsLoaded) bindMemberProofUploads(portal, defaults);
+    if (partnersLoaded) bindMemberPartners(portal, partners);
+    if (eventsLoaded) bindMemberEvents(portal, events);
     $('[data-copy-pix]', portal)?.addEventListener('click', () => copyText(pix.key, 'Chave PIX copiada'));
 
     if (results[0].status === 'rejected' && ![401, 403, 404].includes(results[0].reason?.status)) {
@@ -777,6 +969,224 @@
       escapeHtml(member.id) + '">Excluir</button></div></td></tr>';
   }
 
+  function adminPartnersHtml(partners) {
+    if (!partners.length) return '<div class="empty-state"><strong>Nenhum parceiro ou benefício cadastrado.</strong></div>';
+    return '<div class="admin-catalog-grid">' + partners.map(partner =>
+      '<article class="admin-catalog-card ' + (roleValue(partner.status) === 'inactive' ? 'is-inactive' : '') + '"><header><div><h3>' +
+      escapeHtml(partner.name) + '</h3><p>' + escapeHtml(partner.activity) + '</p></div><span class="status-pill ' +
+      (roleValue(partner.status) === 'active' ? 'active' : 'inactive') + '">' +
+      (roleValue(partner.status) === 'active' ? 'Ativo' : 'Inativo') + '</span></header><dl><div><dt>E-mail</dt><dd>' +
+      escapeHtml(partner.email) + '</dd></div><div><dt>CPF ou CNPJ</dt><dd>' + escapeHtml(formatDocument(partner.document)) +
+      '</dd></div><div><dt>Telefone</dt><dd>' + escapeHtml(formatPhone(partner.phone)) + '</dd></div><div><dt>Cidade</dt><dd>' +
+      escapeHtml(partner.city) + '</dd></div></dl><div class="catalog-actions"><button type="button" data-edit-partner="' +
+      escapeHtml(partner.id) + '">Editar</button><button type="button" data-toggle-partner="' + escapeHtml(partner.id) + '">' +
+      (roleValue(partner.status) === 'active' ? 'Inativar' : 'Ativar') + '</button><button type="button" class="danger" data-delete-partner="' +
+      escapeHtml(partner.id) + '">Excluir</button></div></article>'
+    ).join('') + '</div>';
+  }
+
+  function adminEventsHtml(events) {
+    if (!events.length) return '<div class="empty-state"><strong>Nenhum evento cadastrado.</strong></div>';
+    return '<div class="admin-catalog-grid">' + events.map(item => {
+      const past = eventIsPast(item);
+      return '<article class="admin-catalog-card event-admin-card ' + (past ? 'is-past' : 'is-future') + '"><header><div><h3>' +
+        escapeHtml(item.name) + '</h3><p>' + escapeHtml(dateBr(item.eventDate)) + '</p></div><span class="event-time-badge ' +
+        (past ? 'past' : 'future') + '">' + (past ? 'Realizado' : 'Futuro') + '</span></header><p class="catalog-description">' +
+        escapeHtml(item.description) + '</p><dl><div><dt>Produtor</dt><dd>' + escapeHtml(item.producer) +
+        '</dd></div><div><dt>Cidade</dt><dd>' + escapeHtml(item.city) + '</dd></div><div><dt>Inscrições</dt><dd>' +
+        escapeHtml(registrationStatusLabel(item.registrationStatus)) + '</dd></div></dl><div class="catalog-actions">' +
+        '<button type="button" data-edit-event="' + escapeHtml(item.id) + '">Editar</button>' +
+        '<button type="button" class="danger" data-delete-event="' + escapeHtml(item.id) + '">Excluir</button></div></article>';
+    }).join('') + '</div>';
+  }
+
+  async function loadAdminPartners(portal) {
+    const container = $('[data-admin-partners-content]', portal);
+    if (!container) return;
+    container.innerHTML = loadingContent('Carregando parceiros e benefícios');
+    try {
+      const response = await AssofigAPI.listAdminPartners();
+      privateState.adminPartners = toArray(response, ['partners', 'parceiros', 'items']).map(normalizePartner);
+      container.innerHTML = adminPartnersHtml(privateState.adminPartners);
+      bindAdminPartnerActions(portal);
+    } catch (error) {
+      container.innerHTML = '<div class="error-state compact" role="alert"><strong>' +
+        escapeHtml(friendlyError(error, 'Não foi possível carregar os parceiros ou benefícios.')) +
+        '</strong><button class="btn btn-blue" type="button" data-retry-partners>Tentar novamente</button></div>';
+      $('[data-retry-partners]', container)?.addEventListener('click', () => loadAdminPartners(portal));
+    }
+  }
+
+  function bindAdminPartnerActions(portal) {
+    $$('[data-edit-partner]', portal).forEach(button => button.addEventListener('click', () => partnerEditor(button.dataset.editPartner)));
+    $$('[data-toggle-partner]', portal).forEach(button => button.addEventListener('click', async () => {
+      const partner = privateState.adminPartners.find(item => String(item.id) === String(button.dataset.togglePartner));
+      if (!partner || button.disabled) return;
+      button.disabled = true;
+      try {
+        const status = roleValue(partner.status) === 'active' ? 'inactive' : 'active';
+        await AssofigAPI.updatePartner(partner.id, { status });
+        toast(status === 'active' ? 'Parceiro ativado com sucesso.' : 'Parceiro inativado com sucesso.');
+        await loadAdminPartners(portal);
+      } catch (error) {
+        toast(friendlyError(error, 'Não foi possível alterar a situação do parceiro.'));
+        button.disabled = false;
+      }
+    }));
+    $$('[data-delete-partner]', portal).forEach(button => button.addEventListener('click', async () => {
+      const partner = privateState.adminPartners.find(item => String(item.id) === String(button.dataset.deletePartner));
+      if (!partner || !window.confirm('Confirma a exclusão de ' + partner.name + '?')) return;
+      button.disabled = true;
+      try {
+        await AssofigAPI.deletePartner(partner.id);
+        toast('Parceiro ou benefício excluído com sucesso.');
+        await loadAdminPartners(portal);
+      } catch (error) {
+        toast(friendlyError(error, 'Não foi possível excluir o parceiro ou benefício.'));
+        button.disabled = false;
+      }
+    }));
+  }
+
+  function partnerEditor(id) {
+    const editing = id != null;
+    const partner = editing
+      ? privateState.adminPartners.find(item => String(item.id) === String(id))
+      : { name: '', email: '', document: '', phone: '', activity: '', city: '', status: 'active' };
+    if (!partner) return;
+    const title = editing ? 'Editar parceiro ou benefício' : 'Incluir parceiro ou benefício';
+    const dialog = dynamicModal(
+      '<span class="eyebrow">Parceiros ou Benefícios</span><h2>' + title + '</h2><form class="catalog-editor-form">' +
+      '<div class="member-fields"><label for="partner-name">Nome completo<input id="partner-name" name="name" required value="' + escapeHtml(partner.name) + '"></label>' +
+      '<label for="partner-email">E-mail<input id="partner-email" name="email" type="email" required value="' + escapeHtml(partner.email) + '"></label>' +
+      '<label for="partner-document">CPF ou CNPJ<input id="partner-document" name="document" inputmode="numeric" required value="' + escapeHtml(formatDocument(partner.document)) + '"></label>' +
+      '<label for="partner-phone">Telefone<input id="partner-phone" name="phone" type="tel" required value="' + escapeHtml(formatPhone(partner.phone)) + '"></label>' +
+      '<label for="partner-activity">Atividade<input id="partner-activity" name="activity" required value="' + escapeHtml(partner.activity) + '"></label>' +
+      '<label for="partner-city">Cidade<input id="partner-city" name="city" required value="' + escapeHtml(partner.city) + '"></label>' +
+      '<label for="partner-status">Situação<select id="partner-status" name="status" required><option value="active"' +
+      (roleValue(partner.status) === 'active' ? ' selected' : '') + '>Ativo</option><option value="inactive"' +
+      (roleValue(partner.status) === 'inactive' ? ' selected' : '') + '>Inativo</option></select></label></div>' +
+      '<p class="catalog-form-error" role="alert" hidden></p><div class="catalog-form-actions"><button class="btn btn-secondary" type="button" data-cancel-catalog>Cancelar</button>' +
+      '<button class="btn btn-blue" type="submit">' + title + '</button></div></form>',
+      'catalog-editor-panel'
+    );
+    const form = $('.catalog-editor-form', dialog.modal);
+    const documentInput = form.elements.document;
+    const phoneInput = form.elements.phone;
+    documentInput.addEventListener('input', () => { documentInput.value = formatDocument(documentInput.value); documentInput.setCustomValidity(''); });
+    phoneInput.addEventListener('input', () => { phoneInput.value = formatPhone(phoneInput.value); });
+    $('[data-cancel-catalog]', dialog.modal).addEventListener('click', dialog.close);
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const errorBox = $('.catalog-form-error', form);
+      const button = $('button[type=submit]', form);
+      if (!validDocument(documentInput.value)) {
+        documentInput.setCustomValidity('Informe um CPF ou CNPJ válido.');
+        documentInput.reportValidity();
+        return;
+      }
+      if (button.disabled) return;
+      const data = Object.fromEntries(new FormData(form));
+      data.document = documentDigits(data.document);
+      button.disabled = true;
+      button.textContent = editing ? 'Salvando...' : 'Incluindo...';
+      errorBox.hidden = true;
+      try {
+        if (editing) await AssofigAPI.updatePartner(partner.id, data);
+        else await AssofigAPI.createPartner(data);
+        dialog.close();
+        toast(editing ? 'Parceiro ou benefício atualizado com sucesso.' : 'Parceiro ou benefício incluído com sucesso.');
+        await loadAdminPartners($('#admin-portal'));
+      } catch (error) {
+        errorBox.textContent = friendlyError(error, 'Não foi possível salvar o parceiro ou benefício.');
+        errorBox.hidden = false;
+        button.disabled = false;
+        button.textContent = title;
+      }
+    });
+  }
+
+  async function loadAdminEvents(portal) {
+    const container = $('[data-admin-events-content]', portal);
+    if (!container) return;
+    container.innerHTML = loadingContent('Carregando eventos');
+    try {
+      const response = await AssofigAPI.listAdminEvents();
+      privateState.adminEvents = toArray(response, ['events', 'eventos', 'items']).map(normalizeEvent);
+      container.innerHTML = adminEventsHtml(privateState.adminEvents);
+      bindAdminEventActions(portal);
+    } catch (error) {
+      container.innerHTML = '<div class="error-state compact" role="alert"><strong>' +
+        escapeHtml(friendlyError(error, 'Não foi possível carregar os eventos.')) +
+        '</strong><button class="btn btn-blue" type="button" data-retry-events>Tentar novamente</button></div>';
+      $('[data-retry-events]', container)?.addEventListener('click', () => loadAdminEvents(portal));
+    }
+  }
+
+  function bindAdminEventActions(portal) {
+    $$('[data-edit-event]', portal).forEach(button => button.addEventListener('click', () => eventEditor(button.dataset.editEvent)));
+    $$('[data-delete-event]', portal).forEach(button => button.addEventListener('click', async () => {
+      const item = privateState.adminEvents.find(event => String(event.id) === String(button.dataset.deleteEvent));
+      if (!item || !window.confirm('Confirma a exclusão do evento ' + item.name + '?')) return;
+      button.disabled = true;
+      try {
+        await AssofigAPI.deleteEvent(item.id);
+        toast('Evento excluído com sucesso.');
+        await loadAdminEvents(portal);
+      } catch (error) {
+        toast(friendlyError(error, 'Não foi possível excluir o evento.'));
+        button.disabled = false;
+      }
+    }));
+  }
+
+  function eventEditor(id) {
+    const editing = id != null;
+    const item = editing
+      ? privateState.adminEvents.find(event => String(event.id) === String(id))
+      : { name: '', eventDate: '', description: '', producer: '', city: '', registrationStatus: 'registration_waiting' };
+    if (!item) return;
+    const title = editing ? 'Editar evento' : 'Incluir evento';
+    const dialog = dynamicModal(
+      '<span class="eyebrow">Eventos</span><h2>' + title + '</h2><form class="catalog-editor-form">' +
+      '<div class="member-fields"><label for="event-name">Nome do evento<input id="event-name" name="name" required value="' + escapeHtml(item.name) + '"></label>' +
+      '<label for="event-date">Data<input id="event-date" name="eventDate" type="date" required value="' + escapeHtml(String(item.eventDate || '').slice(0, 10)) + '"></label>' +
+      '<label for="event-producer">Produtor<input id="event-producer" name="producer" required value="' + escapeHtml(item.producer) + '"></label>' +
+      '<label for="event-city">Cidade<input id="event-city" name="city" required value="' + escapeHtml(item.city) + '"></label>' +
+      '<label for="event-status">Situação<select id="event-status" name="registrationStatus" required><option value="registration_open"' +
+      (roleValue(item.registrationStatus) === 'registration_open' ? ' selected' : '') + '>Permitir inscrição</option><option value="registration_waiting"' +
+      (roleValue(item.registrationStatus) === 'registration_waiting' ? ' selected' : '') + '>Aguardar inscrição</option></select></label></div>' +
+      '<label for="event-description">Descrição do evento<textarea id="event-description" name="description" rows="5" required>' +
+      escapeHtml(item.description) + '</textarea></label><p class="catalog-form-error" role="alert" hidden></p>' +
+      '<div class="catalog-form-actions"><button class="btn btn-secondary" type="button" data-cancel-catalog>Cancelar</button>' +
+      '<button class="btn btn-blue" type="submit">' + title + '</button></div></form>',
+      'catalog-editor-panel'
+    );
+    const form = $('.catalog-editor-form', dialog.modal);
+    $('[data-cancel-catalog]', dialog.modal).addEventListener('click', dialog.close);
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form));
+      const button = $('button[type=submit]', form);
+      const errorBox = $('.catalog-form-error', form);
+      if (button.disabled) return;
+      button.disabled = true;
+      button.textContent = editing ? 'Salvando...' : 'Incluindo...';
+      errorBox.hidden = true;
+      try {
+        if (editing) await AssofigAPI.updateEvent(item.id, data);
+        else await AssofigAPI.createEvent(data);
+        dialog.close();
+        toast(editing ? 'Evento atualizado com sucesso.' : 'Evento incluído com sucesso.');
+        await loadAdminEvents($('#admin-portal'));
+      } catch (error) {
+        errorBox.textContent = friendlyError(error, 'Não foi possível salvar o evento.');
+        errorBox.hidden = false;
+        button.disabled = false;
+        button.textContent = title;
+      }
+    });
+  }
   function adminContent(members) {
     const active = members.filter(member => ['active', 'ativo', 'regular'].includes(roleValue(member.status))).length;
     const late = members.filter(member => statusClass(member.status) === 'late').length;
@@ -794,7 +1204,13 @@
       '<th>Cidade</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
       (members.length ? members.map(memberRow).join('') :
         '<tr><td colspan="5"><div class="empty-state"><strong>Nenhum associado cadastrado.</strong></div></td></tr>') +
-      '</tbody></table></div></section>';
+      '</tbody></table></div></section>' +
+      '<section class="panel catalog-section" id="partner-management"><div class="catalog-section-heading"><div><h2>Parceiros ou Benefícios</h2><p>Cadastro e histórico de parceiros oferecidos aos associados.</p></div>' +
+      '<button class="btn btn-blue" type="button" data-add-partner>+ Incluir parceiro ou benefício</button></div><div data-admin-partners-content>' +
+      loadingContent('Carregando parceiros e benefícios') + '</div></section>' +
+      '<section class="panel catalog-section" id="event-management"><div class="catalog-section-heading"><div><h2>Eventos</h2><p>Cadastro e histórico completo de eventos.</p></div>' +
+      '<button class="btn btn-blue" type="button" data-add-event>+ Incluir evento</button></div><div data-admin-events-content>' +
+      loadingContent('Carregando eventos') + '</div></section>';
   }
 
   async function fetchMembers() {
@@ -811,6 +1227,7 @@
       $('.portal-main', portal).innerHTML = adminContent(privateState.members);
       bindPortalCommon(portal);
       bindAdmin(portal);
+      await Promise.allSettled([loadAdminPartners(portal), loadAdminEvents(portal)]);
     } catch (error) {
       if (error.status === 403) {
         $('.portal-main', portal).innerHTML = '<div class="error-state"><h2>Acesso não autorizado.</h2><p>Seu usuário não possui permissão para consultar os associados.</p></div>';
@@ -835,6 +1252,8 @@
     });
 
     $('[data-add-member]', portal)?.addEventListener('click', () => memberEditor());
+    $('[data-add-partner]', portal)?.addEventListener('click', () => partnerEditor());
+    $('[data-add-event]', portal)?.addEventListener('click', () => eventEditor());
     $$('[data-edit-member]', portal).forEach(button => button.addEventListener('click', () => memberEditor(button.dataset.editMember)));
     $$('[data-defaults-member]', portal).forEach(button => button.addEventListener('click', () => manageDefaults(button.dataset.defaultsMember)));
     $$('[data-delete-member]', portal).forEach(button => {

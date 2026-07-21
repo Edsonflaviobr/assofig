@@ -79,6 +79,67 @@ export async function sendApplicationEmail(input: ApplicationEmail): Promise<boo
   if (error) throw new Error('O serviço de e-mail não concluiu o envio.');
   return true;
 }
+type PartnerQuestionEmail = {
+  memberName: string;
+  memberEmail: string;
+  memberPhone?: string | null;
+  partnerName: string;
+  activity: string;
+  city: string;
+  message: string;
+  sentAt: Date;
+};
+
+type EventRegistrationRequestEmail = {
+  memberName: string;
+  memberEmail: string;
+  memberPhone?: string | null;
+  eventName: string;
+  eventDate: string | Date;
+  producer: string;
+  city: string;
+  requestedAt: string | Date;
+};
+
+function formatDateTime(value: string | Date): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short'
+  }).format(value instanceof Date ? value : new Date(value));
+}
+
+export async function sendPartnerQuestionEmail(input: PartnerQuestionEmail): Promise<boolean> {
+  if (!env.RESEND_API_KEY) throw new Error('Serviço de e-mail não configurado.');
+  const resend = new Resend(env.RESEND_API_KEY);
+  const { error } = await resend.emails.send({
+    from: 'ASSOFIG <contato@assofig.com>',
+    to: ['contato@assofig.com'],
+    replyTo: input.memberEmail,
+    subject: `Dúvida sobre parceiro ou benefício - ${input.partnerName}`,
+    text: `Nome do associado: ${input.memberName}\nE-mail: ${input.memberEmail}\nTelefone: ${input.memberPhone ?? 'Não informado'}\nParceiro ou benefício: ${input.partnerName}\nAtividade: ${input.activity}\nCidade: ${input.city}\nData e hora: ${formatDateTime(input.sentAt)}\n\nMensagem:\n${input.message}`,
+    html: `<p><strong>Nome do associado:</strong> ${escapeHtml(input.memberName)}</p><p><strong>E-mail:</strong> ${escapeHtml(input.memberEmail)}</p><p><strong>Telefone:</strong> ${escapeHtml(input.memberPhone ?? 'Não informado')}</p><p><strong>Parceiro ou benefício:</strong> ${escapeHtml(input.partnerName)}</p><p><strong>Atividade:</strong> ${escapeHtml(input.activity)}</p><p><strong>Cidade:</strong> ${escapeHtml(input.city)}</p><p><strong>Data e hora:</strong> ${escapeHtml(formatDateTime(input.sentAt))}</p><p><strong>Mensagem:</strong><br>${escapeHtml(input.message).replace(/\n/g, '<br>')}</p>`
+  });
+  if (error) throw new Error('O serviço de e-mail não concluiu o envio.');
+  return true;
+}
+
+export async function sendEventRegistrationRequestEmail(input: EventRegistrationRequestEmail): Promise<boolean> {
+  if (!env.RESEND_API_KEY) throw new Error('Serviço de e-mail não configurado.');
+  const resend = new Resend(env.RESEND_API_KEY);
+  const eventDate = formatDate(input.eventDate);
+  const requestedAt = formatDateTime(input.requestedAt);
+  const { error } = await resend.emails.send({
+    from: 'ASSOFIG <contato@assofig.com>',
+    to: ['contato@assofig.com'],
+    replyTo: input.memberEmail,
+    subject: `Solicitação de inscrição em evento - ${input.eventName}`,
+    text: `Nome do associado: ${input.memberName}\nE-mail: ${input.memberEmail}\nTelefone: ${input.memberPhone ?? 'Não informado'}\nEvento: ${input.eventName}\nData: ${eventDate}\nProdutor: ${input.producer}\nCidade: ${input.city}\nData e hora da solicitação: ${requestedAt}`,
+    html: `<p><strong>Nome do associado:</strong> ${escapeHtml(input.memberName)}</p><p><strong>E-mail:</strong> ${escapeHtml(input.memberEmail)}</p><p><strong>Telefone:</strong> ${escapeHtml(input.memberPhone ?? 'Não informado')}</p><p><strong>Evento:</strong> ${escapeHtml(input.eventName)}</p><p><strong>Data:</strong> ${escapeHtml(eventDate)}</p><p><strong>Produtor:</strong> ${escapeHtml(input.producer)}</p><p><strong>Cidade:</strong> ${escapeHtml(input.city)}</p><p><strong>Data e hora da solicitação:</strong> ${escapeHtml(requestedAt)}</p>`
+  });
+  if (error) throw new Error('O serviço de e-mail não concluiu o envio.');
+  return true;
+}
 type PaymentProofEmail = {
   memberName: string;
   memberEmail: string;

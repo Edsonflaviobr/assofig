@@ -11,6 +11,10 @@
     contact: '/contato',
     pix: '/payments/pix',
     myDefaults: '/member/inadimplencias',
+    adminPartners: '/admin/partners',
+    memberPartners: '/member/partners',
+    adminEvents: '/admin/events',
+    memberEvents: '/member/events',
     news: '/noticias',
     events: '/eventos'
   };
@@ -165,6 +169,31 @@
         { method: 'PATCH' }
       ),
 
+    listAdminPartners: () => request(routes.adminPartners),
+    getAdminPartner: id => request(routes.adminPartners + '/' + encodeURIComponent(id)),
+    createPartner: data => request(routes.adminPartners, { method: 'POST', body: JSON.stringify(data) }),
+    updatePartner: (id, data) => request(routes.adminPartners + '/' + encodeURIComponent(id), {
+      method: 'PATCH', body: JSON.stringify(data)
+    }),
+    deletePartner: id => request(routes.adminPartners + '/' + encodeURIComponent(id), { method: 'DELETE' }),
+    listMemberPartners: () => request(routes.memberPartners),
+    sendPartnerQuestion: (id, message) => request(
+      routes.memberPartners + '/' + encodeURIComponent(id) + '/question',
+      { method: 'POST', body: JSON.stringify({ message }) }
+    ),
+
+    listAdminEvents: () => request(routes.adminEvents),
+    getAdminEvent: id => request(routes.adminEvents + '/' + encodeURIComponent(id)),
+    createEvent: data => request(routes.adminEvents, { method: 'POST', body: JSON.stringify(data) }),
+    updateEvent: (id, data) => request(routes.adminEvents + '/' + encodeURIComponent(id), {
+      method: 'PATCH', body: JSON.stringify(data)
+    }),
+    deleteEvent: id => request(routes.adminEvents + '/' + encodeURIComponent(id), { method: 'DELETE' }),
+    listUpcomingEvents: () => request(routes.memberEvents + '/upcoming'),
+    requestEventRegistration: id => request(
+      routes.memberEvents + '/' + encodeURIComponent(id) + '/registration-request',
+      { method: 'POST' }
+    ),
     getPixInfo: () => request(routes.pix),
     listNews: () => request(routes.news),
     listEvents: () => request(routes.events)
