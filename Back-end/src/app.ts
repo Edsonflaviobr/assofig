@@ -9,6 +9,7 @@ import { diretoriaRouter, membersRouter } from './routes/diretoria.js';
 import { pagamentosRouter, paymentsPixRouter } from './routes/pagamentos.js';
 import { publicRouter } from './routes/public.js';
 import { beneficiosRouter } from './routes/beneficios.js';
+import { memberRouter } from './routes/member.js';
 import { errorHandler, notFound } from './middleware/error-handler.js';
 
 export const app = express();
@@ -29,7 +30,10 @@ app.use('/api/auth/forgot-password', rateLimit({
 }));
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+app.use('/api/member', memberRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/auth/me', memberRouter);
+app.use('/api/profile', memberRouter);
 app.use('/api/associados', associadosRouter);
 app.use('/api/diretoria', diretoriaRouter);
 app.use('/api/members', membersRouter);

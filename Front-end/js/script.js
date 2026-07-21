@@ -116,12 +116,15 @@
     return profile;
   }
   function normalizeDefault(raw) {
+    const source = raw && typeof raw === 'object' ? raw : {};
     return {
-      id: raw.id ?? raw.inadimplenciaId,
-      status: raw.status ?? raw.situacao ?? 'pending',
-      reference: raw.reference ?? raw.referencia ?? '-',
-      amount: Number(raw.amount ?? raw.valor ?? 0),
-      dueDate: raw.dueDate ?? raw.vencimento ?? raw.due_date ?? ''
+      id: source.id ?? source.inadimplenciaId,
+      status: source.status ?? source.situacao ?? 'pending',
+      reference: source.reference ?? source.referencia ?? '-',
+      referenceMonth: source.referenceMonth ?? source.reference_month ?? source.mesReferencia ?? '',
+      amount: Number(source.amount ?? source.valor ?? 0),
+      dueDate: source.dueDate ?? source.vencimento ?? source.due_date ?? '',
+      proofSentAt: source.proofSentAt ?? source.proof_sent_at ?? source.comprovanteEnviadoEm ?? source.sentAt ?? ''
     };
   }
 
@@ -200,6 +203,62 @@
     return defaultIsOpen(item) ? 'late' : 'active';
   }
 
+  function defaultReference(item) {
+    const value = String(item.referenceMonth || item.reference || '').trim();
+    if (!value || value === '-') return 'Não informada';
+    const isoMatch = value.match(/^(\d{4})-(\d{2})/);
+    if (isoMatch) return isoMatch[2] + '/' + isoMatch[1];
+    const brMatch = value.match(/^(\d{2})\/(\d{4})$/);
+    if (brMatch) return value;
+    return value;
+  }
+
+  function memberDefaultStatus(status) {
+    const value = roleValue(status).replace(/[\s-]+/g, '_');
+    if (['open', 'opened', 'em_aberto', 'pending', 'pendente', 'late', 'overdue', 'pending_payment', 'inadimplente'].includes(value)) {
+      return 'Em aberto';
+    }
+    if (['proof_sent', 'comprovante_enviado', 'awaiting_review', 'under_review', 'aguardando_conferencia'].includes(value)) {
+      return 'Comprovante enviado — aguardando conferência';
+    }
+    if (['paid', 'pago', 'quitada', 'regularized', 'regularizado', 'resolved'].includes(value)) return 'Quitada';
+    return statusLabel(status);
+  }
+
+  function memberDefaultIsOpen(item) {
+    const value = roleValue(item.status).replace(/[\s-]+/g, '_');
+    return ['open', 'opened', 'em_aberto', 'pending', 'pendente', 'late', 'overdue', 'pending_payment', 'inadimplente'].includes(value);
+  }
+
+  function memberDefaultClass(item) {
+    const label = memberDefaultStatus(item.status);
+    if (label === 'Em aberto') return 'late';
+    if (label.startsWith('Comprovante enviado')) return 'pending';
+    return 'active';
+  }
+
+  function fileSizeLabel(bytes) {
+    if (bytes < 1024 * 1024) return (bytes / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' KB';
+    return (bytes / (1024 * 1024)).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' MB';
+  }
+
+  function proofFileError(file) {
+    if (!file) return 'Selecione um arquivo para continuar.';
+    const extension = String(file.name || '').toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+    const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (!allowedExtensions.includes(extension) || (file.type && !allowedTypes.includes(file.type))) {
+      return 'Formato inválido. Envie um arquivo PDF, JPG, JPEG ou PNG.';
+    }
+    if (file.size > 10 * 1024 * 1024) return 'O arquivo deve ter no máximo 10 MB.';
+    return '';
+  }
+
+  function friendlyError(error, fallback) {
+    const candidates = [error?.message, error?.data?.message, error?.data?.error?.message, error?.data?.error];
+    const message = candidates.find(value => typeof value === 'string' && value.trim());
+    return message && message !== '[object Object]' ? message : fallback;
+  }
   const documentDigits = value => String(value || '').replace(/\D/g, '');
 
   function validCPF(value) {
@@ -296,6 +355,73 @@
     }
   }
 
+  function setProfessionOtherMode(value) {
+    const field = $('#profession-other-field');
+    const input = $('#contact-profession-other');
+    const enabled = value === 'Outro';
+    field.hidden = !enabled;
+    input.required = enabled;
+    if (!enabled) input.value = '';
+  }
+
+  function setContactFieldError(form, name, message) {
+    const errorName = name === 'professionOther' ? 'profession' : name;
+    const error = $('#contact-' + errorName + '-error');
+    const field = form.elements[name] || form.elements[errorName];
+    if (error) {
+      error.textContent = message || '';
+      error.hidden = !message;
+    }
+    field?.toggleAttribute('aria-invalid', Boolean(message));
+  }
+
+  function clearContactErrors(form) {
+    ['name', 'email', 'profession', 'professionOther', 'phone', 'city', 'message'].forEach(name =>
+      setContactFieldError(form, name, '')
+    );
+  }
+
+  function contactPayload(form) {
+    clearContactErrors(form);
+    const values = {
+      name: form.elements.name.value.trim(),
+      email: form.elements.email.value.trim(),
+      profession: form.elements.profession.value.trim(),
+      professionOther: form.elements.professionOther.value.trim(),
+      phone: form.elements.phone.value.trim(),
+      city: form.elements.city.value.trim(),
+      message: form.elements.message.value.trim()
+    };
+    let valid = true;
+    const invalidate = (name, message) => {
+      setContactFieldError(form, name, message);
+      valid = false;
+    };
+
+    if (!values.name) invalidate('name', 'Informe seu nome.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) invalidate('email', 'Informe um e-mail válido.');
+    if (!values.profession) invalidate('profession', 'Selecione sua profissão.');
+    if (values.profession === 'Outro' && !values.professionOther) {
+      invalidate('professionOther', 'Informe sua profissão.');
+    }
+    const phoneDigits = values.phone.replace(/\D/g, '');
+    if (phoneDigits.length < 10 || phoneDigits.length > 11) invalidate('phone', 'Informe um telefone válido.');
+    if (!values.city) invalidate('city', 'Informe sua cidade.');
+    if (!values.message) invalidate('message', 'Escreva sua mensagem.');
+    if (!valid) {
+      form.querySelector('[aria-invalid="true"]')?.focus();
+      return null;
+    }
+
+    return {
+      name: values.name,
+      email: values.email,
+      profession: values.profession === 'Outro' ? 'Outro - ' + values.professionOther : values.profession,
+      phone: values.phone,
+      city: values.city,
+      message: values.message || ''
+    };
+  }
   function loadingContent(title) {
     return '<div class="portal-loading"><span class="loading-spinner" aria-hidden="true"></span><h2>' + escapeHtml(title || 'Carregando dados') + '</h2><p>Aguarde um instante.</p></div>';
   }
@@ -306,7 +432,7 @@
     const initials = name.split(/\s+/).slice(0, 2).map(part => part[0] || '').join('').toUpperCase();
     const nav = director
       ? '<button class="active" data-portal-target="admin-overview">▦ Visão geral</button><button data-portal-target="member-management">♙ Associados</button>'
-      : '<button class="active" data-portal-target="member-overview">▦ Visão geral</button><button data-portal-target="my-data">♙ Meus dados</button><button data-portal-target="monthly-payment">$ Mensalidade</button><button data-portal-target="my-defaults">! Pendências</button>';
+      : '<button class="active" data-portal-target="member-overview">▦ Visão geral</button><button data-portal-target="my-data">♙ Meus dados</button><button data-portal-target="my-defaults">! Pendências</button>';
     const switchAction = privateState.access?.canAccessMemberArea && privateState.access?.canAccessAdminArea
       ? '<button class="portal-switch" type="button" data-switch-area>⇄ Trocar de área</button>'
       : '';
@@ -480,16 +606,94 @@
   }
 
   function defaultsHtml(defaults) {
+    const guidance = '<div class="default-guidance"><p>Os pagamentos pendentes da ASSOFIG podem ser regularizados por PIX. Após realizar o pagamento, envie o comprovante correspondente à inadimplência pelo botão disponível abaixo.</p>' +
+      '<p>O comprovante será encaminhado ao setor financeiro da ASSOFIG para conferência. O envio do arquivo não representa quitação automática. A situação será atualizada pela Diretoria após a confirmação do pagamento.</p></div>';
     if (!defaults.length) {
-      return '<div class="empty-state"><span>✓</span><strong>Você não possui pendências financeiras.</strong></div>';
+      return guidance + '<div class="empty-state"><span>✓</span><strong>Você não possui inadimplências pendentes.</strong></div>';
     }
-    return '<div class="defaults-list">' + defaults.map(item =>
-      '<article class="default-item"><div><small>Referência</small><strong>' + escapeHtml(item.reference) +
+    return guidance + '<div class="member-defaults-list">' + defaults.map(item => {
+      const inputId = 'proof-file-' + escapeHtml(item.id);
+      const proofDate = item.proofSentAt
+        ? '<div><small>Comprovante enviado em</small><strong>' + escapeHtml(dateBr(item.proofSentAt)) + '</strong></div>'
+        : '';
+      const upload = memberDefaultIsOpen(item) && item.id != null
+        ? '<div class="proof-upload"><input class="visually-hidden proof-file-input" id="' + inputId + '" data-proof-input="' +
+          escapeHtml(item.id) + '" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" aria-describedby="proof-help-' +
+          escapeHtml(item.id) + '"><label class="btn btn-blue proof-upload-label" for="' + inputId + '" tabindex="0" role="button">Enviar comprovante</label>' +
+          '<small id="proof-help-' + escapeHtml(item.id) + '">PDF, JPG, JPEG ou PNG — máximo de 10 MB.</small>' +
+          '<p class="proof-card-error" data-proof-error="' + escapeHtml(item.id) + '" role="alert" hidden></p></div>'
+        : '';
+      return '<article class="member-default-card"><div class="member-default-data"><div><small>Referência</small><strong>' +
+        escapeHtml(defaultReference(item)) + '</strong></div><div><small>Valor</small><strong>' + escapeHtml(money(item.amount)) +
+        '</strong></div><div><small>Vencimento</small><strong>' + escapeHtml(dateBr(item.dueDate)) +
+        '</strong></div><div><small>Situação</small><span class="status-pill ' + memberDefaultClass(item) + '">' +
+        escapeHtml(memberDefaultStatus(item.status)) + '</span></div>' + proofDate + '</div>' + upload + '</article>';
+    }).join('') + '</div>';
+  }
+
+  function openProofConfirmation(item, file, refresh) {
+    const dialog = dynamicModal(
+      '<span class="eyebrow">Comprovante</span><h2>Confirmar envio</h2><p>Confira o arquivo e a inadimplência antes de enviar.</p>' +
+      '<form class="proof-confirmation-form"><div class="proof-summary"><div><small>Arquivo</small><strong>' + escapeHtml(file.name) +
+      '</strong></div><div><small>Tamanho</small><strong>' + escapeHtml(fileSizeLabel(file.size)) +
+      '</strong></div><div><small>Referência</small><strong>' + escapeHtml(defaultReference(item)) +
       '</strong></div><div><small>Valor</small><strong>' + escapeHtml(money(item.amount)) +
       '</strong></div><div><small>Vencimento</small><strong>' + escapeHtml(dateBr(item.dueDate)) +
-      '</strong></div><span class="status-pill ' + defaultClass(item) + '">' +
-      escapeHtml(statusLabel(item.status)) + '</span></article>'
-    ).join('') + '</div>';
+      '</strong></div></div><p class="proof-confirmation-error" role="alert" hidden></p><div class="proof-confirmation-actions">' +
+      '<button class="btn btn-secondary" type="button" data-cancel-proof>Cancelar</button>' +
+      '<button class="btn btn-blue" type="submit">Enviar comprovante</button></div></form>',
+      'proof-confirmation-panel'
+    );
+    dialog.modal.setAttribute('role', 'dialog');
+    dialog.modal.setAttribute('aria-modal', 'true');
+    $('[data-cancel-proof]', dialog.modal).addEventListener('click', dialog.close);
+    $('.proof-confirmation-form', dialog.modal).addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = $('button[type=submit]', event.currentTarget);
+      const alert = $('.proof-confirmation-error', event.currentTarget);
+      if (button.disabled) return;
+      button.disabled = true;
+      button.textContent = 'Enviando comprovante...';
+      alert.hidden = true;
+      try {
+        await AssofigAPI.uploadMyDefaultProof(item.id, file);
+        dialog.close();
+        toast('Comprovante enviado com sucesso. Seu pagamento será conferido pela Diretoria.');
+        await refresh();
+      } catch (error) {
+        alert.textContent = friendlyError(error, 'Não foi possível enviar o comprovante. Tente novamente.');
+        alert.hidden = false;
+        button.disabled = false;
+        button.textContent = 'Enviar comprovante';
+      }
+    });
+  }
+
+  function bindMemberProofUploads(portal, defaults) {
+    const items = Array.isArray(defaults) ? defaults : [];
+    $$('[data-proof-input]', portal).forEach(input => {
+      const item = items.find(candidate => String(candidate.id) === String(input.dataset.proofInput));
+      const label = $('label[for="' + input.id + '"]', portal);
+      label?.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          input.click();
+        }
+      });
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        const error = proofFileError(file);
+        const alert = $('[data-proof-error="' + input.dataset.proofInput + '"]', portal);
+        input.value = '';
+        if (error || !item) {
+          alert.textContent = error || 'Não foi possível identificar a inadimplência selecionada.';
+          alert.hidden = false;
+          return;
+        }
+        alert.hidden = true;
+        openProofConfirmation(item, file, () => renderMemberPortal(privateState.profile));
+      });
+    });
   }
 
   function pixHtml(pix) {
@@ -498,7 +702,7 @@
     }
     return '<div class="pix-payment"><p>Realize o pagamento utilizando a chave PIX abaixo.</p><div class="pix-box"><small>Chave PIX</small><strong class="pix-key">' +
       escapeHtml(pix.key) + '</strong><small>Favorecido</small><strong>' +
-      escapeHtml(pix.beneficiary || 'Não informado') +
+      escapeHtml(pix.beneficiary || 'Associação de Fisioterapeutas e Terapeutas Ocupacionais de Guaxupé e Região') +
       '</strong></div><button class="btn btn-blue" type="button" data-copy-pix>Copiar chave PIX</button></div>';
   }
 
@@ -511,6 +715,7 @@
     const forbidden = results.find(result => result.status === 'rejected' && result.reason?.status === 403);
     if (forbidden) throw forbidden.reason;
     const defaultsLoaded = results[0].status === 'fulfilled';
+    const defaultsError = defaultsLoaded ? null : results[0].reason;
     const defaults = defaultsLoaded
       ? toArray(results[0].value, ['defaults', 'inadimplencias']).map(normalizeDefault)
       : [];
@@ -523,8 +728,9 @@
       (late ? 'Pendência financeira' : 'Sem pendências') + '</span></header>' +
       '<div class="member-private-grid"><section class="panel" id="my-data"><h2>Meus dados</h2><div class="profile-data">' +
       profileDataHtml(profile) + '</div></section><section class="panel" id="monthly-payment"><h2>Pagamento da mensalidade</h2>' +
-      pixHtml(pix) + '</section></div><section class="panel" id="my-defaults"><h2>Inadimplência</h2>' +
-      (defaultsLoaded ? defaultsHtml(defaults) : '<div class="error-state compact"><strong>Não foi possível carregar suas pendências.</strong></div>') + '</section><section class="panel portal-shortcuts"><h2>Documentos e contato</h2>' +
+      pixHtml(pix) + '</section></div><section class="panel" id="my-defaults"><h2>Inadimplências</h2>' +
+      (defaultsLoaded ? defaultsHtml(defaults) : '<div class="error-state compact" role="alert"><strong>' +
+        escapeHtml(friendlyError(defaultsError, 'Não foi possível carregar suas inadimplências. Tente novamente.')) + '</strong></div>') + '</section><section class="panel portal-shortcuts"><h2>Documentos e contato</h2>' +
       '<div class="history-list"><a class="history-item" href="docs/Estatuto ASSOFIG_registrado.pdf" download><span>↓</span>' +
       '<div><strong>Estatuto ASSOFIG</strong><small>Baixar PDF</small></div></a>' +
       '<a class="history-item" href="mailto:contato@assofig.com"><span>✉</span><div><strong>Falar com a associação</strong>' +
@@ -532,6 +738,7 @@
 
     $('.portal-main', portal).innerHTML = content;
     bindPortalCommon(portal);
+    if (defaultsLoaded) bindMemberProofUploads(portal, defaults);
     $('[data-copy-pix]', portal)?.addEventListener('click', () => copyText(pix.key, 'Chave PIX copiada'));
 
     if (results[0].status === 'rejected' && ![401, 403, 404].includes(results[0].reason?.status)) {
@@ -851,6 +1058,19 @@
   $('#contact-form [name=subject]').addEventListener('change', event =>
     setAssociationMode(['Quero me associar', 'Parcerias'].includes(event.target.value), false)
   );
+  $('#contact-form [name=profession]').addEventListener('change', event => {
+    setProfessionOtherMode(event.target.value);
+    setContactFieldError($('#contact-form'), 'profession', '');
+  });
+  $('#contact-form [name=phone]').addEventListener('input', event => {
+    event.target.value = formatPhone(event.target.value);
+    setContactFieldError($('#contact-form'), 'phone', '');
+  });
+  ['name', 'email', 'city', 'message', 'professionOther'].forEach(name => {
+    $('#contact-form [name=' + name + ']').addEventListener('input', () =>
+      setContactFieldError($('#contact-form'), name, '')
+    );
+  });
   $('#contact-form [name=document]').addEventListener('input', event => {
     event.target.value = formatDocument(event.target.value);
     event.target.setCustomValidity('');
@@ -991,31 +1211,40 @@
   $('#contact-form').addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;
-    const data = Object.fromEntries(new FormData(form));
-    const association = data.subject === 'Quero me associar';
-    const needsDocument = association || data.subject === 'Parcerias';
-    const documentInput = form.elements.document;
+    const payload = contactPayload(form);
+    if (!payload) return;
 
+    const subject = form.elements.subject.value;
+    const association = subject === 'Quero me associar';
+    const needsDocument = association || subject === 'Parcerias';
+    const documentInput = form.elements.document;
     if (needsDocument) {
-      if (!validDocument(data.document)) {
+      if (!validDocument(documentInput.value)) {
         documentInput.setCustomValidity('Informe um CPF ou CNPJ válido.');
         documentInput.setAttribute('aria-invalid', 'true');
         documentInput.reportValidity();
         return;
       }
-      data.document = documentDigits(data.document);
-    } else {
-      delete data.document;
+      payload.document = documentDigits(documentInput.value);
     }
 
+    const button = $('button[type=submit]', form);
+    const originalButton = button.innerHTML;
+    button.disabled = true;
+    button.textContent = 'Enviando...';
     try {
-      if (association) await AssofigAPI.submitApplication(data);
-      else await AssofigAPI.sendContact(data);
+      if (association) await AssofigAPI.submitApplication(payload);
+      else await AssofigAPI.sendContact(payload);
       form.reset();
+      clearContactErrors(form);
+      setProfessionOtherMode('');
       setAssociationMode(false, false);
-      toast('Solicitação enviada com sucesso. A diretoria da ASSOFIG analisará seus dados e entrará em contato.');
+      toast('Mensagem enviada com sucesso. Em breve entraremos em contato.');
     } catch (error) {
-      toast(error.message);
+      toast(friendlyError(error, 'Não foi possível enviar sua mensagem. Tente novamente.'));
+    } finally {
+      button.disabled = false;
+      button.innerHTML = originalButton;
     }
   });
 

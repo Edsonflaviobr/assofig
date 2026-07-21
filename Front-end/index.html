@@ -146,7 +146,28 @@
     <section class="section contact" id="contato">
       <div class="container contact-grid">
         <div class="contact-copy reveal"><span class="eyebrow">Contato</span><h2>Vamos conversar?</h2><p>Estamos disponíveis para orientar profissionais, estudantes, parceiros e a comunidade.</p><div class="contact-items"><a href="mailto:contato@assofig.com"><span>✉</span><div><small>E-mail</small><strong>contato@assofig.com</strong></div></a><a href="https://www.instagram.com/_assofig/" target="_blank" rel="noopener"><span>◎</span><div><small>Instagram</small><strong>@_assofig</strong></div></a><div><span>⌖</span><div><small>Atuação</small><strong>Guaxupé, região e todo o Sul de Minas</strong><em>Atendimento mediante agendamento</em></div></div></div></div>
-        <form class="contact-form reveal" id="contact-form"><div class="form-title"><span>Envie sua mensagem</span><small>Responderemos assim que possível.</small></div><label>Nome completo<input name="name" required placeholder="Como podemos chamar você?"></label><div class="form-row"><label>E-mail<input name="email" type="email" required placeholder="seu@email.com"></label><label>Assunto<select name="subject"><option>Dúvidas</option><option>Quero me associar</option><option>Parcerias</option><option>Eventos</option></select></label></div><label id="association-document-field" hidden>CPF ou CNPJ<input name="document" inputmode="numeric" autocomplete="off" maxlength="18" placeholder="000.000.000-00 ou 00.000.000/0000-00"><small class="field-help">Aceitamos CPF ou CNPJ. O envio será feito somente com os dígitos.</small></label><label>Mensagem<textarea name="message" required rows="4" placeholder="Escreva sua mensagem..."></textarea></label><button class="btn btn-blue" type="submit">Enviar mensagem <span>→</span></button></form>
+        <form class="contact-form reveal" id="contact-form" novalidate>
+          <div class="form-title"><span>Envie sua mensagem</span><small>Responderemos assim que possível.</small></div>
+          <label for="contact-name">Nome completo</label>
+          <input id="contact-name" name="name" required autocomplete="name" placeholder="Como podemos chamar você?" aria-describedby="contact-name-error">
+          <small class="form-error" id="contact-name-error" role="alert" hidden></small>
+          <div class="form-row">
+            <div class="form-field"><label for="contact-email">E-mail</label><input id="contact-email" name="email" type="email" required autocomplete="email" placeholder="seu@email.com" aria-describedby="contact-email-error"><small class="form-error" id="contact-email-error" role="alert" hidden></small></div>
+            <div class="form-field"><label for="contact-city">Cidade</label><input id="contact-city" name="city" required autocomplete="address-level2" placeholder="Ex.: Guaxupé" aria-describedby="contact-city-error"><small class="form-error" id="contact-city-error" role="alert" hidden></small></div>
+          </div>
+          <div class="form-row">
+            <div class="form-field"><label for="contact-profession">Profissão</label><select id="contact-profession" name="profession" required aria-describedby="contact-profession-error"><option value="">Selecione</option><option>Fisioterapeuta</option><option>Terapeuta Ocupacional</option><option>Estudante de Fisioterapia</option><option>Estudante de Terapia Ocupacional</option><option value="Outro">Outro</option></select><small class="form-error" id="contact-profession-error" role="alert" hidden></small></div>
+            <div class="form-field"><label for="contact-phone">Telefone</label><input id="contact-phone" name="phone" type="tel" required autocomplete="tel" inputmode="tel" maxlength="15" placeholder="(35) 99999-9999" aria-describedby="contact-phone-error"><small class="form-error" id="contact-phone-error" role="alert" hidden></small></div>
+          </div>
+          <div class="form-field" id="profession-other-field" hidden><label for="contact-profession-other">Informe sua profissão</label><input id="contact-profession-other" name="professionOther" autocomplete="organization-title" placeholder="Ex.: Professor" aria-describedby="contact-profession-error"></div>
+          <label for="contact-subject">Assunto</label>
+          <select id="contact-subject" name="subject"><option>Dúvidas</option><option>Quero me associar</option><option>Parcerias</option><option>Eventos</option></select>
+          <label id="association-document-field" for="contact-document" hidden>CPF ou CNPJ<input id="contact-document" name="document" inputmode="numeric" autocomplete="off" maxlength="18" placeholder="000.000.000-00 ou 00.000.000/0000-00" aria-describedby="contact-document-help"><small class="field-help" id="contact-document-help">Aceitamos CPF ou CNPJ. O envio será feito somente com os dígitos.</small></label>
+          <label for="contact-message">Mensagem</label>
+          <textarea id="contact-message" name="message" required rows="4" placeholder="Escreva sua mensagem..." aria-describedby="contact-message-error"></textarea>
+          <small class="form-error" id="contact-message-error" role="alert" hidden></small>
+          <button class="btn btn-blue" type="submit">Enviar mensagem <span>→</span></button>
+        </form>
       </div>
     </section>
   </main>

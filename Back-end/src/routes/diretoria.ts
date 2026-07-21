@@ -35,7 +35,7 @@ const delinquencySchema = z.object({
 }));
 
 async function syncFinancialStatus(client: { query: Function }, associadoId: number) {
-  const open = await client.query("SELECT EXISTS (SELECT 1 FROM inadimplencias WHERE associado_id = $1 AND status = 'open') AS has_open", [associadoId]);
+  const open = await client.query("SELECT EXISTS (SELECT 1 FROM inadimplencias WHERE associado_id = $1 AND status IN ('open', 'proof_sent')) AS has_open", [associadoId]);
   const current = await client.query('SELECT status FROM associados WHERE id = $1', [associadoId]);
   if (!current.rowCount) throw new ApiError(404, 'Associado não encontrado.');
   const status = open.rows[0].has_open ? 'late' : current.rows[0].status === 'pending' ? 'pending' : 'active';
@@ -46,7 +46,7 @@ const listAssociados: RequestHandler = async (req, res) => {
   const status = z.enum(['active', 'late', 'pending']).optional().parse(req.query.status);
   const search = z.string().trim().max(160).optional().parse(req.query.search);
   const result = await pool.query(
-    `SELECT a.*, COUNT(i.id) FILTER (WHERE i.status = 'open')::int AS open_delinquencies
+    `SELECT a.*, COUNT(i.id) FILTER (WHERE i.status IN ('open', 'proof_sent'))::int AS open_delinquencies
      FROM associados a LEFT JOIN inadimplencias i ON i.associado_id = a.id
      WHERE ($1::associado_status IS NULL OR a.status = $1)
        AND ($2::text IS NULL OR a.name ILIKE '%' || $2 || '%' OR a.email ILIKE '%' || $2 || '%' OR a.document = regexp_replace($2, '\D', '', 'g'))
@@ -105,7 +105,7 @@ const updateAssociado: RequestHandler = async (req, res) => {
          VALUES ($1, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, 50, 'Inadimplência registrada pela diretoria')
          ON CONFLICT (associado_id, reference_month) DO UPDATE SET status='open', resolved_at=NULL, updated_at=NOW()`, [id]);
     } else if (input.status === 'active') {
-      await client.query("UPDATE inadimplencias SET status='resolved', resolved_at=NOW(), updated_at=NOW() WHERE associado_id=$1 AND status='open'", [id]);
+      await client.query("UPDATE inadimplencias SET status='resolved', resolved_at=NOW(), updated_at=NOW() WHERE associado_id=$1 AND status IN ('open','proof_sent')", [id]);
     }
     return result.rows[0];
   });

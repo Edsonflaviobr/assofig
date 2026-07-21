@@ -79,3 +79,57 @@ export async function sendApplicationEmail(input: ApplicationEmail): Promise<boo
   if (error) throw new Error('O serviço de e-mail não concluiu o envio.');
   return true;
 }
+type PaymentProofEmail = {
+  memberName: string;
+  memberEmail: string;
+  delinquencyId: number;
+  amount: number;
+  dueDate: string | Date;
+  referenceMonth: string | Date | null;
+  proof: {
+    filename: string;
+    contentType: string;
+    content: Buffer;
+  };
+};
+
+function datePart(value: string | Date): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function formatDate(value: string | Date): string {
+  const [year, month, day] = datePart(value).split('-');
+  return year && month && day ? `${day}/${month}/${year}` : 'Não informada';
+}
+
+function formatReference(value: string | Date | null): string {
+  if (!value) return 'Não informada';
+  const [year, month] = datePart(value).split('-');
+  return year && month ? `${month}/${year}` : 'Não informada';
+}
+
+export async function sendPaymentProofEmail(input: PaymentProofEmail): Promise<string | null> {
+  if (!env.RESEND_API_KEY) throw new Error('Serviço de e-mail não configurado.');
+
+  const reference = formatReference(input.referenceMonth);
+  const dueDate = formatDate(input.dueDate);
+  const amount = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(input.amount);
+  const resend = new Resend(env.RESEND_API_KEY);
+  const { data, error } = await resend.emails.send({
+    from: 'ASSOFIG <contato@assofig.com>',
+    to: ['faturamento@assofig.com'],
+    replyTo: input.memberEmail,
+    subject: `Comprovante de pagamento - ${input.memberName}`,
+    text: `Comprovante de pagamento recebido\n\nNome do associado:\n${input.memberName}\n\nE-mail:\n${input.memberEmail}\n\nReferência:\n${reference}\n\nValor:\n${amount}\n\nData de vencimento:\n${dueDate}\n\nIdentificador da inadimplência:\n${input.delinquencyId}\n\nO associado enviou um comprovante de pagamento para conferência. O envio do comprovante não realiza a baixa automática da inadimplência.`,
+    html: `<h2>Comprovante de pagamento recebido</h2><p><strong>Nome do associado:</strong><br>${escapeHtml(input.memberName)}</p><p><strong>E-mail:</strong><br>${escapeHtml(input.memberEmail)}</p><p><strong>Referência:</strong><br>${escapeHtml(reference)}</p><p><strong>Valor:</strong><br>${escapeHtml(amount)}</p><p><strong>Data de vencimento:</strong><br>${escapeHtml(dueDate)}</p><p><strong>Identificador da inadimplência:</strong><br>${input.delinquencyId}</p><p>O associado enviou um comprovante de pagamento para conferência. O envio do comprovante não realiza a baixa automática da inadimplência.</p>`,
+    attachments: [{
+      filename: input.proof.filename,
+      contentType: input.proof.contentType,
+      content: input.proof.content
+    }]
+  });
+
+  if (error) throw new Error('O serviço de e-mail não concluiu o envio.');
+  return data?.id ?? null;
+}

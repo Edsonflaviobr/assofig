@@ -10,8 +10,7 @@
     applications: '/inscricoes',
     contact: '/contato',
     pix: '/payments/pix',
-    myDefaults: '/auth/me/inadimplencias',
-    myDefaultsFallback: '/profile/inadimplencias',
+    myDefaults: '/member/inadimplencias',
     news: '/noticias',
     events: '/eventos'
   };
@@ -25,6 +24,19 @@
     }
   }
 
+  function apiErrorMessage(data) {
+    const candidates = [data?.message, data?.error, data?.details?.message];
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim()) return candidate;
+      if (typeof candidate?.message === 'string' && candidate.message.trim()) return candidate.message;
+    }
+    if (Array.isArray(data?.errors)) {
+      const first = data.errors.find(item => typeof item === 'string' || typeof item?.message === 'string');
+      if (typeof first === 'string') return first;
+      if (typeof first?.message === 'string') return first.message;
+    }
+    return 'Não foi possível concluir a solicitação.';
+  }
   async function request(path, options = {}) {
     const token = localStorage.getItem('assofig_token');
     let response;
@@ -33,7 +45,7 @@
       response = await fetch(API_BASE_URL + path, {
         ...options,
         headers: {
-          'Content-Type': 'application/json',
+          ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
           ...(token ? { Authorization: 'Bearer ' + token } : {}),
           ...options.headers
         }
@@ -46,7 +58,7 @@
 
     if (!response.ok) {
       const error = new ApiError(
-        data?.message || data?.error || 'Não foi possível concluir a solicitação.',
+        apiErrorMessage(data),
         response.status,
         data
       );
@@ -127,11 +139,16 @@
         method: 'DELETE'
       }),
 
-    getMyDefaults: () =>
-      fallbackOnNotFound(
-        () => request(routes.myDefaults),
-        () => request(routes.myDefaultsFallback)
-      ),
+    getMyDefaults: () => request(routes.myDefaults),
+
+    uploadMyDefaultProof: (defaultId, file) => {
+      const formData = new FormData();
+      formData.append('proof', file);
+      return request(
+        routes.myDefaults + '/' + encodeURIComponent(defaultId) + '/comprovante',
+        { method: 'POST', body: formData }
+      );
+    },
 
     listMemberDefaults: id =>
       request(memberPath(id) + '/inadimplencias'),

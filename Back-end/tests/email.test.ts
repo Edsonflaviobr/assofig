@@ -15,7 +15,7 @@ vi.mock('resend', () => ({
   }
 }));
 
-import { sendApplicationEmail, sendContactEmail, sendPasswordResetEmail } from '../src/services/email.js';
+import { sendApplicationEmail, sendContactEmail, sendPasswordResetEmail, sendPaymentProofEmail } from '../src/services/email.js';
 
 describe('envio de e-mails', () => {
   beforeEach(() => mocks.send.mockReset());
@@ -73,5 +73,36 @@ describe('envio de e-mails', () => {
     expect(body.to).toEqual(['contato@assofig.com']);
     expect(body.replyTo).toBe('interessada@email.com');
     expect(body.subject).toBe('Nova solicitação de associação - ASSOFIG');
+  });
+  it('envia comprovante ao faturamento com replyTo e anexo em Buffer', async () => {
+    mocks.send.mockResolvedValue({ data: { id: 'proof-email-id' }, error: null });
+    const proof = Buffer.from('%PDF-1.7 comprovante');
+
+    const emailId = await sendPaymentProofEmail({
+      memberName: 'Associada Teste',
+      memberEmail: 'associada@email.com',
+      delinquencyId: 15,
+      amount: 120,
+      dueDate: '2026-08-10',
+      referenceMonth: '2026-08-01',
+      proof: { filename: 'comprovante.pdf', contentType: 'application/pdf', content: proof }
+    });
+
+    expect(emailId).toBe('proof-email-id');
+    const body = mocks.send.mock.calls[0]?.[0] as {
+      to: string[];
+      replyTo: string;
+      subject: string;
+      text: string;
+      attachments: Array<{ filename: string; contentType: string; content: Buffer }>;
+    };
+    expect(body.to).toEqual(['faturamento@assofig.com']);
+    expect(body.replyTo).toBe('associada@email.com');
+    expect(body.subject).toBe('Comprovante de pagamento - Associada Teste');
+    expect(body.text).toContain('08/2026');
+    expect(body.text).toContain('120,00');
+    expect(body.text).toContain('10/08/2026');
+    expect(body.text).toContain('não realiza a baixa automática');
+    expect(body.attachments).toEqual([{ filename: 'comprovante.pdf', contentType: 'application/pdf', content: proof }]);
   });
 });
