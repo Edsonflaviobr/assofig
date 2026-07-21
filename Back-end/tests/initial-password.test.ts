@@ -13,6 +13,7 @@ const token = signToken({ userId: 70, role: 'member', associadoId: 90 });
 const authorization = { Authorization: `Bearer ${token}` };
 let passwordHash = '';
 let mustChangePassword = true;
+let userRole: 'member' | 'admin' = 'member';
 
 type QueryResult = { rows: Array<Record<string, unknown>>; rowCount: number };
 
@@ -24,7 +25,7 @@ function installDatabaseMock(): void {
           id: 70,
           email: 'novo@email.com',
           password_hash: passwordHash,
-          role: 'member',
+          role: userRole,
           name: 'Novo Associado',
           associado_id: 90,
           must_change_password: mustChangePassword,
@@ -51,7 +52,7 @@ function installDatabaseMock(): void {
       return {
         rows: [{
           mustChangePassword,
-          user: { id: 70, name: 'Novo Associado', email: 'novo@email.com', mustChangePassword },
+          user: { id: 70, name: 'Novo Associado', email: 'novo@email.com', role: userRole, mustChangePassword },
           associado: { id: 90, name: 'Novo Associado', email: 'novo@email.com', city: 'Guaxupé', inadimplencias: [] }
         }],
         rowCount: 1
@@ -65,6 +66,7 @@ describe('troca obrigatória da senha inicial', () => {
   beforeEach(async () => {
     passwordHash = await bcrypt.hash(env.SEED_PASSWORD, 12);
     mustChangePassword = true;
+    userRole = 'member';
     mocks.poolQuery.mockReset();
     installDatabaseMock();
   });
@@ -152,6 +154,11 @@ describe('troca obrigatória da senha inicial', () => {
       confirmPassword: 'NovaSenha#2026'
     });
 
+    const oldPasswordLogin = await request(app).post('/api/auth/login').send({
+      email: 'novo@email.com',
+      password: env.SEED_PASSWORD,
+      role: 'member'
+    });
     const login = await request(app).post('/api/auth/login').send({
       email: 'novo@email.com',
       password: 'NovaSenha#2026',
@@ -159,8 +166,40 @@ describe('troca obrigatória da senha inicial', () => {
     });
     const privateAccess = await request(app).get('/api/payments/pix').set({ Authorization: `Bearer ${login.body.token}` });
 
+    expect(oldPasswordLogin.status).toBe(401);
     expect(login.status).toBe(200);
     expect(login.body.mustChangePassword).toBe(false);
     expect(privateAccess.status).toBe(200);
+  });
+  it('aplica o fluxo obrigatório também ao administrador sem remover sua role', async () => {
+    userRole = 'admin';
+    const login = await request(app).post('/api/auth/login').send({
+      email: 'novo@email.com',
+      password: env.SEED_PASSWORD,
+      role: 'admin'
+    });
+
+    const blocked = await request(app).get('/api/members').set({ Authorization: `Bearer ${login.body.token}` });
+    const changed = await request(app).post('/api/auth/change-initial-password').set({ Authorization: `Bearer ${login.body.token}` }).send({
+      currentPassword: env.SEED_PASSWORD,
+      newPassword: 'NovaSenhaAdmin#2026',
+      confirmPassword: 'NovaSenhaAdmin#2026'
+    });
+    const nextLogin = await request(app).post('/api/auth/login').send({
+      email: 'novo@email.com',
+      password: 'NovaSenhaAdmin#2026',
+      role: 'admin'
+    });
+    const adminAccess = await request(app).get('/api/members').set({ Authorization: `Bearer ${nextLogin.body.token}` });
+
+    expect(login.status).toBe(200);
+    expect(login.body).toMatchObject({ role: 'admin', mustChangePassword: true });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.message).toMatch(/troca da senha inicial/i);
+    expect(changed.status).toBe(200);
+    expect(mustChangePassword).toBe(false);
+    expect(nextLogin.status).toBe(200);
+    expect(nextLogin.body).toMatchObject({ role: 'admin', mustChangePassword: false });
+    expect(adminAccess.status).toBe(200);
   });
 });
