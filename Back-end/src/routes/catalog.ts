@@ -170,7 +170,9 @@ adminCatalogRouter.post('/events', async (req, res) => {
 });
 
 adminCatalogRouter.get('/events', async (_req, res) => {
-  const result = await pool.query(`SELECT ${eventColumns} FROM events ORDER BY event_date DESC, id DESC`);
+  const result = await pool.query(
+    `SELECT ${eventColumns} FROM events WHERE deleted_at IS NULL ORDER BY event_date DESC, id DESC`
+  );
   res.json(result.rows);
 });
 

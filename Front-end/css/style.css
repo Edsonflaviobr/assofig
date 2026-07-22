@@ -66,3 +66,7 @@ html,body{max-width:100%;overflow-x:hidden;overflow-x:clip}.hero-copy,.hero-visu
 /* Aproxima a agenda pública da seção de contato */
 #noticias{padding-bottom:40px}#contato{padding-top:40px}
 @media(max-width:780px){#noticias{padding-bottom:28px}#contato{padding-top:28px}}
+
+/* Rolagem das listas administrativas de parceiros e eventos */
+[data-admin-partners-content],[data-admin-events-content]{max-height:min(58vh,620px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:6px}
+@media(max-width:520px){[data-admin-partners-content],[data-admin-events-content]{max-height:62vh;padding-right:3px}}

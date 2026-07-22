@@ -4,6 +4,7 @@
   const routes = {
     login: '/auth/login',
     forgotPassword: '/auth/forgot-password',
+    resetPassword: '/auth/reset-password',
     changePassword: '/auth/change-initial-password',
     profile: '/auth/me',
     members: '/members',
@@ -101,6 +102,12 @@
 
     forgotPassword: data =>
       request(routes.forgotPassword, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+
+    resetPassword: data =>
+      request(routes.resetPassword, {
         method: 'POST',
         body: JSON.stringify(data)
       }),

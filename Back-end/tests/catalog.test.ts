@@ -116,8 +116,10 @@ function installDatabaseMock(): void {
       events.push(event);
       return result([event]);
     }
-    if (sql.includes('FROM events ORDER BY event_date DESC')) {
-      return result([...events].sort((a, b) => String(b.eventDate).localeCompare(String(a.eventDate))));
+    if (sql.includes('FROM events WHERE deleted_at IS NULL ORDER BY event_date DESC')) {
+      return result(events
+        .filter((item) => item.deletedAt === null)
+        .sort((a, b) => String(b.eventDate).localeCompare(String(a.eventDate))));
     }
     if (sql.includes('FROM events WHERE id=$1')) return result(events.filter((item) => item.id === params[0]));
     if (sql.includes('UPDATE events SET name=$2')) {
@@ -286,6 +288,7 @@ describe('parceiros e eventos', () => {
     expect(edited.body.city).toBe('Muzambinho');
     expect(removed.status).toBe(200);
     expect(history.body.map((item: Row) => item.name)).toContain('Evento passado');
+    expect(history.body.map((item: Row) => item.name)).not.toContain('Congresso');
   });
 
   it('associado vê somente eventos atuais/futuros e o estado persistido da solicitação', async () => {
