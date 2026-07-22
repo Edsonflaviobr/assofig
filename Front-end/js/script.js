@@ -490,16 +490,17 @@
   function setContactFieldError(form, name, message) {
     const errorName = name === 'professionOther' ? 'profession' : name;
     const error = $('#contact-' + errorName + '-error');
-    const field = form.elements[name] || form.elements[errorName];
+    const field = form.elements.namedItem(name) || form.elements.namedItem(errorName);
     if (error) {
       error.textContent = message || '';
       error.hidden = !message;
     }
-    field?.toggleAttribute('aria-invalid', Boolean(message));
+    if (message) field?.setAttribute('aria-invalid', 'true');
+    else field?.removeAttribute('aria-invalid');
   }
 
   function clearContactErrors(form) {
-    ['name', 'email', 'profession', 'professionOther', 'phone', 'city', 'message'].forEach(name =>
+    ['name', 'email', 'profession', 'professionOther', 'phone', 'city', 'subject', 'message'].forEach(name =>
       setContactFieldError(form, name, '')
     );
   }
@@ -513,6 +514,7 @@
       professionOther: form.elements.professionOther.value.trim(),
       phone: form.elements.phone.value.trim(),
       city: form.elements.city.value.trim(),
+      subject: form.elements.subject.value.trim(),
       message: form.elements.message.value.trim()
     };
     let valid = true;
@@ -530,6 +532,9 @@
     const phoneDigits = values.phone.replace(/\D/g, '');
     if (phoneDigits.length < 10 || phoneDigits.length > 11) invalidate('phone', 'Informe um telefone válido.');
     if (!values.city) invalidate('city', 'Informe sua cidade.');
+    if (!['Dúvida', 'Quero me associar', 'Eventos', 'Parcerias'].includes(values.subject)) {
+      invalidate('subject', 'Selecione um assunto válido.');
+    }
     if (!values.message) invalidate('message', 'Escreva sua mensagem.');
     if (!valid) {
       form.querySelector('[aria-invalid="true"]')?.focus();
@@ -542,6 +547,7 @@
       profession: values.profession === 'Outro' ? 'Outro - ' + values.professionOther : values.profession,
       phone: values.phone,
       city: values.city,
+      subject: values.subject,
       message: values.message || ''
     };
   }
@@ -1550,9 +1556,10 @@
   $$('[data-close]').forEach(button => button.addEventListener('click', closeModals));
   $$('[data-associate]').forEach(link => link.addEventListener('click', () => setAssociationMode(true, true)));
 
-  $('#contact-form [name=subject]').addEventListener('change', event =>
-    setAssociationMode(['Quero me associar', 'Parcerias'].includes(event.target.value), false)
-  );
+  $('#contact-form [name=subject]').addEventListener('change', event => {
+    setAssociationMode(['Quero me associar', 'Parcerias'].includes(event.target.value), false);
+    setContactFieldError($('#contact-form'), 'subject', '');
+  });
   $('#contact-form [name=profession]').addEventListener('change', event => {
     setProfessionOtherMode(event.target.value);
     setContactFieldError($('#contact-form'), 'profession', '');
@@ -1722,7 +1729,7 @@
     const payload = contactPayload(form);
     if (!payload) return;
 
-    const subject = form.elements.subject.value;
+    const subject = payload.subject;
     const association = subject === 'Quero me associar';
     const needsDocument = association || subject === 'Parcerias';
     const documentInput = form.elements.document;

@@ -161,7 +161,7 @@
           </div>
           <div class="form-field" id="profession-other-field" hidden><label for="contact-profession-other">Informe sua profissão</label><input id="contact-profession-other" name="professionOther" autocomplete="organization-title" placeholder="Ex.: Professor" aria-describedby="contact-profession-error"></div>
           <label for="contact-subject">Assunto</label>
-          <select id="contact-subject" name="subject"><option>Dúvidas</option><option>Quero me associar</option><option>Parcerias</option><option>Eventos</option></select>
+          <select id="contact-subject" name="subject" required aria-describedby="contact-subject-error"><option>Dúvida</option><option>Quero me associar</option><option>Eventos</option><option>Parcerias</option></select><small class="form-error" id="contact-subject-error" role="alert" hidden></small>
           <label id="association-document-field" for="contact-document" hidden>CPF ou CNPJ<input id="contact-document" name="document" inputmode="numeric" autocomplete="off" maxlength="18" placeholder="000.000.000-00 ou 00.000.000/0000-00" aria-describedby="contact-document-help"><small class="field-help" id="contact-document-help">Aceitamos CPF ou CNPJ. O envio será feito somente com os dígitos.</small></label>
           <label for="contact-message">Mensagem</label>
           <textarea id="contact-message" name="message" required rows="4" placeholder="Escreva sua mensagem..." aria-describedby="contact-message-error"></textarea>
