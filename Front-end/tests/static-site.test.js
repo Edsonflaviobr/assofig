@@ -20,6 +20,11 @@ test('página principal carrega PDF e credenciais antes do script principal', ()
   assert.ok(pdf >= 0 && credentialsModule > pdf && main > credentialsModule);
 });
 
+test('seção de contato contém o canal oficial do YouTube', () => {
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  assert.match(html, /href="https:\/\/www\.youtube\.com\/channel\/UCiGkJ6oDy-9d0ZE44BpEebQ"/);
+  assert.match(html, /<small>YouTube<\/small><strong>Canal ASSOFIG<\/strong>/);
+});
 test('rota pública /validar aponta para a página existente', () => {
   const config = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8'));
   assert.ok(config.rewrites.some(item => item.source === '/validar' && item.destination === '/validar.html'));
