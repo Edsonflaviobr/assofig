@@ -34,6 +34,12 @@ test('cliente HTTP contém somente os endpoints públicos e autenticados esperad
   assert.match(api, /skipAuth:\s*true/);
 });
 
+test('cadastro administrativo classifica associados por categoria e inclui empresa', () => {
+  const script = readFileSync(join(root, 'js/script.js'), 'utf8');
+  assert.match(script, /\{ name: 'profession', label: 'Categoria', type: 'profession'/);
+  assert.match(script, /const options = \['Fisioterapeuta', 'Terapeuta Ocupacional', 'Estudante', 'Empresa'\]/);
+  assert.match(script, /<th>Categoria<\/th>/);
+});
 test('frente da carteira não possui campos de documento ou identificação interna', () => {
   const fields = Object.keys(credentials.TEMPLATE_SPECS.frente.fields);
   assert.deepEqual(fields.sort(), ['category', 'name', 'validity']);

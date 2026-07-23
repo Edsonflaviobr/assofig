@@ -14,7 +14,7 @@
     { name: 'email', label: 'E-mail', type: 'email', required: true },
     { name: 'document', label: 'CPF ou CNPJ', required: true },
     { name: 'phone', label: 'Telefone' },
-    { name: 'profession', label: 'Profissão', type: 'profession', required: true },
+    { name: 'profession', label: 'Categoria', type: 'profession', required: true },
     { name: 'registry', label: 'CREFITO / Matrícula' },
     { name: 'city', label: 'Cidade', required: true },
     { name: 'status', label: 'Situação', type: 'status', required: true }
@@ -1474,9 +1474,9 @@
       active + '</strong></div><div class="metric"><small>Inadimplentes</small><strong class="red">' +
       late + '</strong></div><div class="metric"><small>Pendentes</small><strong>' + pending +
       '</strong></div></div><section class="panel" id="member-management" style="margin-top:18px">' +
-      '<div class="admin-tools"><input id="member-search" aria-label="Buscar associados" placeholder="Buscar por nome, profissão ou cidade">' +
+      '<div class="admin-tools"><input id="member-search" aria-label="Buscar associados" placeholder="Buscar por nome, categoria ou cidade">' +
       '<button class="btn btn-blue" type="button" data-add-member>+ Incluir associado</button></div>' +
-      '<div class="portal-table-wrap"><table class="portal-table"><thead><tr><th>Associado</th><th>Profissão</th>' +
+      '<div class="portal-table-wrap"><table class="portal-table"><thead><tr><th>Associado</th><th>Categoria</th>' +
       '<th>Cidade</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
       (members.length ? members.map(memberRow).join('') :
         '<tr><td colspan="5"><div class="empty-state"><strong>Nenhum associado cadastrado.</strong></div></td></tr>') +
@@ -1553,7 +1553,7 @@
   function fieldHtml(field, value) {
     const safeValue = escapeHtml(value || '');
     if (field.type === 'profession') {
-      const options = ['Fisioterapeuta', 'Terapeuta Ocupacional', 'Estudante'];
+      const options = ['Fisioterapeuta', 'Terapeuta Ocupacional', 'Estudante', 'Empresa'];
       return '<label>' + field.label + '<select name="' + field.name + '" ' +
         (field.required ? 'required' : '') + '><option value="">Selecione</option>' +
         options.map(option => '<option ' + (option === value ? 'selected' : '') + '>' +
