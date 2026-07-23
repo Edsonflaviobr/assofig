@@ -3,7 +3,11 @@ import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { emailSchema } from '../schemas/common.js';
 import { documentSchema, readDocumentInput } from '../utils/document.js';
-import { sendApplicationEmail, sendContactEmail } from '../services/email.js';
+import {
+  sendApplicationEmail,
+  sendAssociationRequestConfirmationEmail,
+  sendContactEmail
+} from '../services/email.js';
 import { listPublicUpcomingEvents } from '../services/events.js';
 
 export const publicRouter = Router();
@@ -35,6 +39,11 @@ publicRouter.post('/inscricoes', async (req, res) => {
     await sendApplicationEmail(input);
   } catch {
     console.error('Falha ao enviar solicitação de associação por e-mail.');
+  }
+  try {
+    await sendAssociationRequestConfirmationEmail(input);
+  } catch {
+    console.error('Falha ao enviar confirmação da solicitação de associação por e-mail.');
   }
   res.status(201).json(result.rows[0]);
 });

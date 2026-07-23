@@ -17,6 +17,7 @@ vi.mock('resend', () => ({
 
 import {
   sendApplicationEmail,
+  sendAssociationRequestConfirmationEmail,
   sendContactEmail,
   sendEventRegistrationRequestEmail,
   sendPartnerQuestionEmail,
@@ -80,6 +81,28 @@ describe('envio de e-mails', () => {
     expect(body.to).toEqual(['contato@assofig.com']);
     expect(body.replyTo).toBe('interessada@email.com');
     expect(body.subject).toBe('Nova solicitação de associação - ASSOFIG');
+  });
+  it('confirma a solicitação ao interessado com HTML seguro e idempotência', async () => {
+    mocks.send.mockResolvedValue({ data: { id: 'confirmation-id' }, error: null });
+
+    await sendAssociationRequestConfirmationEmail({
+      name: '<img src=x onerror=alert(1)>',
+      email: 'interessada@email.com',
+      document: '11444777000161'
+    });
+
+    const body = mocks.send.mock.calls[0]?.[0] as {
+      from: string; to: string[]; replyTo: string; subject: string; text: string; html: string;
+    };
+    const options = mocks.send.mock.calls[0]?.[1] as { idempotencyKey: string };
+    expect(body.from).toBe('ASSOFIG <contato@assofig.com>');
+    expect(body.to).toEqual(['interessada@email.com']);
+    expect(body.replyTo).toBe('contato@assofig.com');
+    expect(body.subject).toBe('Recebemos sua solicitação de associação à ASSOFIG');
+    expect(body.text).toContain('prazo para conclusão da análise é de até 30 dias');
+    expect(body.html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(body.html).not.toContain('<img src=x onerror=alert(1)>');
+    expect(options.idempotencyKey).toMatch(/^association-confirmation-[a-f0-9]{64}$/);
   });
   it('envia comprovante ao faturamento com replyTo e anexo em Buffer', async () => {
     mocks.send.mockResolvedValue({ data: { id: 'proof-email-id' }, error: null });
