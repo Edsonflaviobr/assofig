@@ -11,6 +11,7 @@ import { publicRouter } from './routes/public.js';
 import { beneficiosRouter } from './routes/beneficios.js';
 import { memberRouter } from './routes/member.js';
 import { adminCatalogRouter } from './routes/catalog.js';
+import { credentialsRouter, publicCredentialsRouter } from './routes/credentials.js';
 import { errorHandler, notFound } from './middleware/error-handler.js';
 
 export const app = express();
@@ -30,9 +31,18 @@ app.use('/api/auth/forgot-password', rateLimit({
   message: { message: 'Se o e-mail estiver cadastrado, enviaremos as instruções de recuperação.' }
 }));
 
+app.use('/api/credenciais/validar', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false
+}));
+
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 app.use('/api/member', memberRouter);
 app.use('/api/admin', adminCatalogRouter);
+app.use('/api/minha-credencial', credentialsRouter);
+app.use('/api/credenciais', publicCredentialsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/auth/me', memberRouter);
 app.use('/api/profile', memberRouter);

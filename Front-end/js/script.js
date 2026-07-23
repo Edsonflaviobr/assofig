@@ -577,6 +577,11 @@
   function bindPortalCommon(portal) {
     $('.portal-logout', portal)?.addEventListener('click', logout);
     $('[data-switch-area]', portal)?.addEventListener('click', showAccessHub);
+    if (portal.id === 'member-portal' && !$('[data-portal-target="my-credential"]', portal)) {
+      $('[data-portal-target="my-data"]', portal)?.insertAdjacentHTML(
+        'afterend', '<button data-portal-target="my-credential">▣ Credencial digital</button>'
+      );
+    }
     $$('[data-portal-target]', portal).forEach(button => button.addEventListener('click', () => {
       $('#' + button.dataset.portalTarget, portal)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }));
@@ -960,6 +965,188 @@
       }
     }));
   }
+  function credentialStatusText(credential) {
+    if (credential.status === 'suspensa') return 'Suspensa';
+    if (credential.status === 'vencida') return 'Vencida';
+    return credential.type === 'certificado' ? 'Ativa' : 'Ativo';
+  }
+
+  function credentialStatusClass(credential) {
+    if (credential.status === 'suspensa') return 'late';
+    if (credential.status === 'vencida') return 'late';
+    return 'active';
+  }
+
+  function credentialFieldHtml(name, value, spec, preferredLength, minimumScale) {
+    if (value == null || value === '') return '';
+    const scale = AssofigCredentials.fitScale(value, preferredLength, minimumScale);
+    return '<span class="credential-field credential-field-' + name + '" style="left:' +
+      (spec.x * 100) + '%;top:' + (spec.y * 100) + '%;width:' + (spec.width * 100) +
+      '%;height:' + (spec.height * 100) + '%;--credential-fit:' + scale + '">' +
+      escapeHtml(value) + '</span>';
+  }
+
+  function credentialArtHtml(template, credential) {
+    const spec = AssofigCredentials.TEMPLATE_SPECS[template];
+    const category = credential.category === 'Terap. Ocupacional'
+      ? 'Terapeuta Ocupacional'
+      : credential.category;
+    const values = {
+      name: credential.displayName,
+      category,
+      validity: credential.validityYear == null ? '' : String(credential.validityYear),
+      code: credential.verificationCode
+    };
+    const fieldOptions = template === 'certificado'
+      ? { name: [42, 0.46], validity: [4, 1], code: [9, 0.8] }
+      : { name: [27, 0.56], category: [22, 0.58], validity: [4, 1], code: [9, 0.78] };
+
+    return '<div class="credential-art credential-art-' + template + '">' +
+      '<img src="' + spec.src + '" alt="' + escapeHtml(spec.alt) + '">' +
+      Object.entries(spec.fields).map(([field, fieldSpec]) => {
+        const options = fieldOptions[field] || [20, 0.5];
+        return credentialFieldHtml(field, values[field], fieldSpec, options[0], options[1]);
+      }).join('') + '</div>';
+  }
+
+  function credentialPanelHtml(profile, credential, loadError) {
+    if (loadError) {
+      return '<div class="credential-heading"><div><h2>Credencial digital</h2><p>Documento exclusivo do associado.</p></div></div>' +
+        '<div class="credential-message error" role="alert"><strong>Não foi possível carregar sua credencial neste momento.</strong>' +
+        '<button class="btn-small" type="button" data-retry-credential>Tentar novamente</button></div>';
+    }
+
+    const type = AssofigCredentials.credentialTypeFor(profile, credential);
+    const labels = AssofigCredentials.credentialLabels(type);
+    if (!credential.available) {
+      return '<div class="credential-heading"><div><h2>' + labels.title + '</h2>' +
+        '<p>' + labels.availableText + '</p></div><span class="credential-lock" aria-hidden="true">✓</span></div>' +
+        '<div class="credential-issue-state"><p>Emissão imediata e exclusiva para seu cadastro.</p>' +
+        '<button class="btn btn-blue" type="button" data-issue-credential>' + labels.issue + ' <span>→</span></button>' +
+        '<p class="credential-action-message" data-credential-message role="status" aria-live="polite"></p></div>';
+    }
+
+    return '<div class="credential-heading"><div><h2>' + labels.title + '</h2>' +
+      '<p>Sua credencial digital já foi emitida e está disponível.</p></div><span class="status-pill ' +
+      credentialStatusClass(credential) + '">' + credentialStatusText(credential) + '</span></div>' +
+      '<div class="credential-summary"><div><small>Código de verificação</small><strong>' +
+      escapeHtml(credential.verificationCode || 'Não informado') + '</strong></div>' +
+      '<div><small>Validade</small><strong>' + escapeHtml(credential.validityYear || 'Não informada') + '</strong></div></div>' +
+      '<div class="credential-actions"><button class="btn btn-blue" type="button" data-view-credential>' +
+      labels.view + '</button><button class="btn btn-secondary" type="button" data-download-credential>' +
+      labels.download + '</button><a class="btn btn-secondary" href="/validar" target="_blank" rel="noopener">Verificar autenticidade</a>' +
+      '<button class="btn btn-secondary" type="button" data-copy-credential>Copiar código</button></div>' +
+      '<p class="credential-action-message" data-credential-message role="status" aria-live="polite"></p>';
+  }
+
+  function openCredentialViewer(credential) {
+    const labels = AssofigCredentials.credentialLabels(credential.type);
+    const isCard = credential.type === 'carteira';
+    const tabs = isCard
+      ? '<div class="credential-tabs" role="tablist" aria-label="Lados da carteira">' +
+        '<button class="active" type="button" role="tab" aria-selected="true" data-credential-tab="frente">Frente</button>' +
+        '<button type="button" role="tab" aria-selected="false" data-credential-tab="verso">Verso</button></div>'
+      : '';
+    const art = isCard
+      ? '<div data-credential-face="frente">' + credentialArtHtml('frente', credential) + '</div>' +
+        '<div data-credential-face="verso" hidden>' + credentialArtHtml('verso', credential) + '</div>'
+      : credentialArtHtml('certificado', credential);
+    const dialog = dynamicModal('<span class="eyebrow">Credencial digital</span><h2>' + labels.title + '</h2>' +
+      tabs + '<div class="credential-viewer-art">' + art + '</div><div class="credential-viewer-footer"><span>Código: <strong>' +
+      escapeHtml(credential.verificationCode) + '</strong></span><button class="btn btn-blue" type="button" data-viewer-download>' +
+      labels.download + '</button></div><p class="credential-viewer-message" role="status" aria-live="polite"></p>', 'credential-viewer-panel');
+
+    $$('[data-credential-tab]', dialog.modal).forEach(button => button.addEventListener('click', () => {
+      $$('[data-credential-tab]', dialog.modal).forEach(tab => {
+        const active = tab === button;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', String(active));
+      });
+      $$('[data-credential-face]', dialog.modal).forEach(face => {
+        face.hidden = face.dataset.credentialFace !== button.dataset.credentialTab;
+      });
+    }));
+
+    $('[data-viewer-download]', dialog.modal)?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const message = $('.credential-viewer-message', dialog.modal);
+      button.disabled = true;
+      button.textContent = 'Preparando PDF...';
+      try {
+        await AssofigCredentials.downloadCredentialPdf(credential);
+        message.textContent = 'Download preparado com sucesso.';
+      } catch {
+        message.textContent = 'Não foi possível gerar o PDF neste momento. Tente novamente.';
+      } finally {
+        button.disabled = false;
+        button.textContent = labels.download;
+      }
+    });
+  }
+
+  async function reloadCredentialSection(portal, profile) {
+    const container = $('[data-credential-content]', portal);
+    if (!container) return;
+    container.innerHTML = loadingContent('Carregando sua credencial');
+    try {
+      const credential = AssofigCredentials.normalizeCredential(await AssofigAPI.getMyCredential());
+      container.innerHTML = credentialPanelHtml(profile, credential, null);
+      bindCredentialActions(portal, profile, credential);
+    } catch (error) {
+      if (error.status === 401 || error.status === 403) throw error;
+      container.innerHTML = credentialPanelHtml(profile, { available: false, type: '' }, error);
+      bindCredentialActions(portal, profile, { available: false, type: '' }, error);
+    }
+  }
+
+  function bindCredentialActions(portal, profile, credential, loadError) {
+    $('[data-retry-credential]', portal)?.addEventListener('click', () => reloadCredentialSection(portal, profile));
+
+    $('[data-issue-credential]', portal)?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      if (button.disabled) return;
+      const message = $('[data-credential-message]', portal);
+      button.disabled = true;
+      button.textContent = 'Emitindo...';
+      message.textContent = '';
+      try {
+        const issued = AssofigCredentials.normalizeCredential(await AssofigAPI.issueMyCredential());
+        const container = $('[data-credential-content]', portal);
+        container.innerHTML = credentialPanelHtml(profile, issued, null);
+        bindCredentialActions(portal, profile, issued);
+        toast('Credencial emitida com sucesso.');
+      } catch {
+        message.textContent = 'Não foi possível emitir sua credencial neste momento. Tente novamente.';
+        button.disabled = false;
+        const type = AssofigCredentials.credentialTypeFor(profile, credential);
+        button.textContent = AssofigCredentials.credentialLabels(type).issue;
+      }
+    });
+
+    $('[data-view-credential]', portal)?.addEventListener('click', () => openCredentialViewer(credential));
+    $('[data-copy-credential]', portal)?.addEventListener('click', () => {
+      copyText(credential.verificationCode, 'Código de verificação copiado');
+    });
+    $('[data-download-credential]', portal)?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const labels = AssofigCredentials.credentialLabels(credential.type);
+      const message = $('[data-credential-message]', portal);
+      button.disabled = true;
+      button.textContent = 'Preparando PDF...';
+      message.textContent = '';
+      try {
+        await AssofigCredentials.downloadCredentialPdf(credential);
+        message.textContent = 'Download preparado com sucesso.';
+      } catch {
+        message.textContent = 'Não foi possível gerar o PDF neste momento. Tente novamente.';
+      } finally {
+        button.disabled = false;
+        button.textContent = labels.download;
+      }
+    });
+
+    if (loadError) return;
+  }
   async function renderMemberPortal(profile) {
     const portal = $('#member-portal');
     portal.innerHTML = portalLayout('member', profile, loadingContent('Carregando seu perfil'));
@@ -967,7 +1154,7 @@
 
     const results = await Promise.allSettled([
       AssofigAPI.getMyDefaults(), AssofigAPI.getPixInfo(),
-      AssofigAPI.listMemberPartners(), AssofigAPI.listUpcomingEvents()
+      AssofigAPI.listMemberPartners(), AssofigAPI.listUpcomingEvents(), AssofigAPI.getMyCredential()
     ]);
     const forbidden = results.find(result => result.status === 'rejected' && result.reason?.status === 403);
     if (forbidden) throw forbidden.reason;
@@ -985,6 +1172,10 @@
     const events = eventsLoaded
       ? toArray(results[3].value, ['events', 'eventos', 'items']).map(normalizeEvent)
       : [];
+    const credentialLoaded = results[4].status === 'fulfilled';
+    const credential = credentialLoaded
+      ? AssofigCredentials.normalizeCredential(results[4].value)
+      : { available: false, type: '' };
     const late = defaults.some(defaultIsOpen);
 
     const content = '<header class="portal-top" id="member-overview"><div><h1>Olá, ' +
@@ -996,6 +1187,8 @@
       pixHtml(pix) + '</section></div><section class="panel" id="my-defaults"><h2>Inadimplências</h2>' +
       (defaultsLoaded ? defaultsHtml(defaults) : '<div class="error-state compact" role="alert"><strong>' +
         escapeHtml(friendlyError(defaultsError, 'Não foi possível carregar suas inadimplências. Tente novamente.')) + '</strong></div>') + '</section>' +
+      '<section class="panel credential-section" id="my-credential"><div data-credential-content>' +
+      credentialPanelHtml(profile, credential, credentialLoaded ? null : results[4].reason) + '</div></section>' +
       '<section class="panel catalog-section" id="member-partners"><div class="catalog-section-heading"><div><h2>Parceiros ou Benefícios</h2><p>Conheça os parceiros ativos disponíveis para associados.</p></div></div><div data-member-partners-content>' +
       (partnersLoaded ? memberPartnersHtml(partners) : '<div class="error-state compact" role="alert"><strong>' +
         escapeHtml(friendlyError(results[2].reason, 'Não foi possível carregar os parceiros ou benefícios.')) + '</strong></div>') + '</div></section>' +
@@ -1013,6 +1206,7 @@
     if (defaultsLoaded) bindMemberProofUploads(portal, defaults);
     if (partnersLoaded) bindMemberPartners(portal, partners);
     if (eventsLoaded) bindMemberEvents(portal, events);
+    bindCredentialActions(portal, profile, credential, credentialLoaded ? null : results[4].reason);
     $('[data-copy-pix]', portal)?.addEventListener('click', () => copyText(pix.key, 'Chave PIX copiada'));
 
     if (results[0].status === 'rejected' && ![401, 403, 404].includes(results[0].reason?.status)) {

@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/reset-password", "destination": "/reset-password.html" }
+    { "source": "/reset-password", "destination": "/reset-password.html" },
+    { "source": "/validar", "destination": "/validar.html" }
   ]
 }

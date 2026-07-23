@@ -1,0 +1,11 @@
+{
+  "name": "assofig-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Frontend estático da ASSOFIG",
+  "scripts": {
+    "test": "node --test tests/credentials-frontend.test.js tests/static-site.test.js",
+    "lint": "node scripts/lint.js",
+    "build": "node scripts/build.js"
+  }
+}

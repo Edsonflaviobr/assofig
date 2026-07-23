@@ -17,6 +17,8 @@
     adminEvents: '/admin/events',
     memberEvents: '/member/events',
     publicEvents: '/public/events',
+    myCredential: '/minha-credencial',
+    validateCredential: '/credenciais/validar',
     news: '/noticias',
     events: '/eventos'
   };
@@ -45,15 +47,16 @@
   }
   async function request(path, options = {}) {
     const token = localStorage.getItem('assofig_token');
+    const { skipAuth = false, ...requestOptions } = options;
     let response;
 
     try {
       response = await fetch(API_BASE_URL + path, {
-        ...options,
+        ...requestOptions,
         headers: {
-          ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-          ...(token ? { Authorization: 'Bearer ' + token } : {}),
-          ...options.headers
+          ...(requestOptions.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+          ...(token && !skipAuth ? { Authorization: 'Bearer ' + token } : {}),
+          ...requestOptions.headers
         }
       });
     } catch {
@@ -69,7 +72,7 @@
         data
       );
 
-      if (response.status === 401 && token) {
+      if (response.status === 401 && token && !skipAuth) {
         localStorage.removeItem('assofig_token');
         window.dispatchEvent(new CustomEvent('assofig:session-expired', { detail: { status: response.status } }));
       }
@@ -203,6 +206,13 @@
       { method: 'POST' }
     ),
     listPublicEvents: () => request(routes.publicEvents),
+    getMyCredential: () => request(routes.myCredential),
+    issueMyCredential: () => request(routes.myCredential + '/emitir', { method: 'POST' }),
+    validateCredential: codigo => request(routes.validateCredential, {
+      skipAuth: true,
+      method: 'POST',
+      body: JSON.stringify({ codigo })
+    }),
     getPixInfo: () => request(routes.pix),
     listNews: () => request(routes.news),
     listEvents: () => request(routes.events)

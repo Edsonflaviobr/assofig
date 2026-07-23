@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Valide uma carteira de associado ou certificado de associação da ASSOFIG.">
+  <title>Validar credencial | ASSOFIG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/validar.css">
+</head>
+<body class="validation-page">
+  <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+  <header class="validation-header">
+    <a class="validation-brand" href="/" aria-label="Voltar para a página inicial da ASSOFIG">
+      <img src="img/assofig.jpg" alt="">
+      <span><strong>ASSOFIG</strong><small>Guaxupé e região</small></span>
+    </a>
+    <a class="validation-back" href="/">← Voltar ao site</a>
+  </header>
+
+  <main id="conteudo" class="validation-main">
+    <section class="validation-card" aria-labelledby="validation-title">
+      <div class="validation-intro">
+        <span class="eyebrow">Consulta pública</span>
+        <h1 id="validation-title">Validar credencial da ASSOFIG</h1>
+        <p>Informe o código presente no verso da carteira ou no certificado de associação.</p>
+      </div>
+
+      <form class="validation-form" id="credential-validation-form" novalidate>
+        <label for="credential-code">Código de verificação</label>
+        <input id="credential-code" name="codigo" type="text" inputmode="text" maxlength="20"
+          autocomplete="off" autocapitalize="characters" spellcheck="false"
+          placeholder="AS4K-82PZ" aria-describedby="credential-code-help credential-code-error" required>
+        <small id="credential-code-help">Aceitamos o código com ou sem hífen.</small>
+        <small class="validation-field-error" id="credential-code-error" role="alert" hidden></small>
+        <button class="btn btn-blue" type="submit">Verificar <span>→</span></button>
+      </form>
+
+      <div class="validation-loading" id="validation-loading" role="status" aria-live="polite" hidden>
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <span>Verificando credencial...</span>
+      </div>
+
+      <section class="validation-result" id="validation-result" aria-live="polite" aria-atomic="true" hidden></section>
+      <p class="validation-privacy">A consulta utiliza somente o código público. Nenhum documento ou dado financeiro é exibido.</p>
+    </section>
+  </main>
+
+  <footer class="validation-footer">
+    <span>Associação de Fisioterapeutas e Terapeutas Ocupacionais de Guaxupé e Região</span>
+    <a href="mailto:contato@assofig.com">contato@assofig.com</a>
+  </footer>
+
+  <script src="js/api.js" defer></script>
+  <script src="js/credentials.js" defer></script>
+  <script src="js/validar.js" defer></script>
+</body>
+</html>

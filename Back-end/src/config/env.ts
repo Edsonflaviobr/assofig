@@ -14,7 +14,8 @@ const schema = z.object({
   EMAIL_FROM: z.email().optional(),
   SEED_PASSWORD: z.string().min(6).max(200),
   PIX_KEY: z.string().default(''),
-  PIX_RECEIVER_NAME: z.string().default('ASSOFIG')
+  PIX_RECEIVER_NAME: z.string().default('ASSOFIG'),
+  CREDENTIAL_VALID_UNTIL: z.iso.date().optional()
 }).superRefine((values, context) => {
   if (values.NODE_ENV !== 'production') return;
 
